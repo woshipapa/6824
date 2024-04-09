@@ -214,6 +214,7 @@ func (c *Coordinator) Done() bool {
 func (c *Coordinator) RegisterWorker(args *RegisterArg, reply *RegisterReply) error {
 	c.mutex.Lock()
 	reply.WorkerId = c.nextWorkerId
+	fmt.Printf("Worker registered successfully with ID: %d\n", c.nextWorkerId)
 	c.nextWorkerId++
 	c.mutex.Unlock()
 	return nil
@@ -247,6 +248,7 @@ func (c *Coordinator) makeMapTasks(files []string, nReduce int) {
 	for i, v := range files {
 		id := i
 		c.mapTasks <- id
+		v = "main/" + v
 		c.taskMap[id] = &TaskInfo{
 			FilePath:  v,
 			TaskId:    id,
