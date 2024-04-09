@@ -1,33 +1,187 @@
 package mr
 
-import "log"
+import (
+	"fmt"
+	"log"
+	"sync"
+	"time"
+)
 import "net"
 import "os"
 import "net/rpc"
 import "net/http"
 
+type TaskInfo struct {
+	TaskId         int
+	TaskType       TaskType
+	FilePath       string
+	NReducer       int
+	AssignedWorker int
+	FailedWorkers  []int
+	TaskState      State
+	StartTime      time.Time
+}
 
 type Coordinator struct {
 	// Your definitions here.
-
+	mapTasks     chan int
+	reduceTasks  chan int
+	taskMap      map[int]*TaskInfo //根据任务编号快速得到任务的详情，包括当前任务的状态以及分配给了哪一个worker
+	mutex        sync.Mutex
+	nReducer     int
+	taskPhase    Phase
+	files        []string
+	nextWorkerId int
 }
 
-// Your code here -- RPC handlers for the worker to call.
+// 协调者看当前所处的阶段 map reduce alldone
+type Phase int
 
-//
-// an example RPC handler.
-//
-// the RPC argument and reply types are defined in rpc.go.
-//
-func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
+const (
+	MapPhase Phase = iota
+	ReducePhase
+	AllDone
+)
+
+// 任务的类型
+type TaskType int
+
+const (
+	MapTask TaskType = iota
+	ReduceTask
+	WaittingTask
+	ExitTask
+)
+
+type State int
+
+const (
+	Idle State = iota
+	Running
+	Finished
+)
+
+// Your code here -- RPC handlers for the worker to call.
+// 给worker分配任务
+func (c *Coordinator) GetTaskInfo(args *AskArg, reply *TaskInfo) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	switch c.taskPhase {
+	case MapPhase:
+		{
+			if len(c.mapTasks) > 0 {
+				index := <-c.mapTasks
+				*reply = *c.taskMap[index]
+				//修改任务信息
+				c.taskMap[index].AssignedWorker = args.WorkerId
+				c.taskMap[index].TaskState = Running
+				c.taskMap[index].StartTime = time.Now()
+				go c.monitorTask(index, args.WorkerId)
+			} else {
+				// 还处于MapPhase阶段，但是mapTask都分发出去了，说明map的任务没有都完成,此时来请求的worker让他等待
+				reply.TaskType = WaittingTask
+				return nil
+			}
+		}
+	case ReducePhase:
+		{
+			//if len(c.reduceTasks) > 0 {}
+		}
+		break
+	default:
+		reply.TaskType = ExitTask
+	}
 	return nil
 }
 
+func (c *Coordinator) monitorTask(index int, wid int) {
+	select {
+	case <-time.After(10 * time.Second):
+		c.mutex.Lock()
+		defer c.mutex.Unlock()
+		task, exists := c.taskMap[index]
+		state := task.TaskState
+		assignedWorkerId := task.AssignedWorker
+		if exists && state == Running && assignedWorkerId == wid {
+			task.AssignedWorker = -1
+			task.TaskState = Idle
+			task.StartTime = time.Time{}
+			task.FailedWorkers = append(task.FailedWorkers, wid)
+			go func() { c.mapTasks <- index }()
+		}
+	}
 
+}
+
+func (c *Coordinator) MarkFinished(args *DoneArg, reply *DoneReply) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	rwid := args.WorkerId
+	taskId := args.TaskId
+	task := c.taskMap[taskId]
+	switch task.TaskType {
+	case MapTask:
+		if task.TaskState == Running {
+			if rwid == task.AssignedWorker {
+				task.TaskState = Finished
+				fmt.Printf("Map task Id[%d] is finished.\n", task.TaskId)
+				go c.renameFiles(args.TempFiles)
+			} else {
+				fmt.Printf("Map task Id[%d] is now assigned by worker[%d],not worker[%d]", task.TaskId, task.AssignedWorker, rwid)
+			}
+		} else if task.TaskState == Idle {
+			fmt.Printf("The worker[%d] is time out!\n", rwid)
+		} else {
+			fmt.Printf("Map task Id[%d] is finished,already ! ! !\n", task.TaskId)
+		}
+		if c.allMapTasksFinished() {
+			c.initReduceTasks()
+		}
+
+	}
+
+	return nil
+}
+
+// allMapTasksFinished 检查是否所有Map任务都已完成
+func (c *Coordinator) allMapTasksFinished() bool {
+	for _, task := range c.taskMap {
+		if task.TaskType == MapTask && task.TaskState != Finished {
+			return false
+		}
+	}
+	return true
+}
+
+// initReduceTasks 初始化Reduce任务
+func (c *Coordinator) initReduceTasks() {
+	// 更新阶段为Reduce
+	c.taskPhase = AllDone
+	// 这里初始化Reduce任务，例如填充reduceTasks通道和设置任务状态
+}
+
+func (c *Coordinator) renameFiles(renameFiles []RenameFile) {
+	for _, file := range renameFiles {
+		err := os.Rename(file.OldName, file.NewName)
+		if err != nil {
+			log.Printf("Failed to rename file from %s to %s: %v\n", file.OldName, file.NewName, err)
+			// 处理错误，例如记录日志或重试
+		} else {
+			log.Printf("Successfully renamed file from %s to %s\n", file.OldName, file.NewName)
+		}
+	}
+}
+
+// an example RPC handler.
 //
+// the RPC argument and reply types are defined in rpc.go.
+//func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
+//	reply.Y = args.X + 1
+//	return nil
+//}
+
 // start a thread that listens for RPCs from worker.go
-//
 func (c *Coordinator) server() {
 	rpc.Register(c)
 	rpc.HandleHTTP()
@@ -41,30 +195,66 @@ func (c *Coordinator) server() {
 	go http.Serve(l, nil)
 }
 
-//
 // main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
-//
+// Done 主函数mr调用，如果所有task完成mr会通过此方法退出
 func (c *Coordinator) Done() bool {
-	ret := false
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if c.taskPhase == AllDone {
+		fmt.Printf("All tasks are finished,the coordinator will be exit! !")
+		return true
+	} else {
+		return false
+	}
 
-	// Your code here.
-
-
-	return ret
 }
 
-//
+// 为注册的worker提供一个唯一的id
+func (c *Coordinator) RegisterWorker(args *RegisterArg, reply *RegisterReply) error {
+	c.mutex.Lock()
+	reply.WorkerId = c.nextWorkerId
+	c.nextWorkerId++
+	c.mutex.Unlock()
+	return nil
+}
+
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
-//
+// 这个会被main/mrcoordinator.go 调用来创建一个协调者
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	c := Coordinator{}
+	c := Coordinator{
+		files:        files,
+		nReducer:     nReduce,
+		mapTasks:     make(chan int, len(files)),
+		reduceTasks:  make(chan int, nReduce),
+		taskMap:      make(map[int]*TaskInfo, len(files)+nReduce),
+		taskPhase:    MapPhase,
+		nextWorkerId: 0,
+	}
+	c.makeMapTasks(files, nReduce)
 
 	// Your code here.
 
-
 	c.server()
 	return &c
+}
+
+// 根据输入文件创建好MapTask
+func (c *Coordinator) makeMapTasks(files []string, nReduce int) {
+
+	for i, v := range files {
+		id := i
+		c.mapTasks <- id
+		c.taskMap[id] = &TaskInfo{
+			FilePath:  v,
+			TaskId:    id,
+			TaskType:  MapTask,
+			NReducer:  nReduce,
+			TaskState: Idle,
+		}
+		fmt.Println("make a map task :", c.taskMap[id])
+	}
+
 }
