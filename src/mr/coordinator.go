@@ -124,12 +124,20 @@ func (c *Coordinator) monitorTask(index int, wid int) {
 		task, exists := c.taskMap[index]
 		state := task.TaskState
 		assignedWorkerId := task.AssignedWorker
+		taskType := task.TaskType
 		if exists && state == Running && assignedWorkerId == wid {
 			task.AssignedWorker = -1
 			task.TaskState = Idle
 			task.StartTime = time.Time{}
 			task.FailedWorkers = append(task.FailedWorkers, wid)
-			go func() { c.mapTasks <- index }()
+			switch taskType {
+			case MapTask:
+				go func() { c.mapTasks <- index }()
+			case ReduceTask:
+				go func() { c.reduceTasks <- index }()
+			default:
+				log.Printf("Unknown task type %d for task %d\n", taskType, index)
+			}
 		}
 	}
 

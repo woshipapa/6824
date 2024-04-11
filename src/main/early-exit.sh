@@ -103,6 +103,8 @@ fi
 
 rm -f $DF
 
+
+
 # a process has exited. this means that the output should be finalized
 # otherwise, either a worker or the coordinator exited early
 sort mr-out* | grep . > mr-wc-all-initial
@@ -120,4 +122,4 @@ else
   echo '---' early exit test: FAIL
   failed_any=1
 fi
-rm -f mr-*
+#rm -f mr-*
