@@ -103,7 +103,7 @@ func RegisterWorkerRPC() (int, error) {
 	reply := RegisterReply{}
 	ok := call("Coordinator.RegisterWorker", &args, &reply)
 	if ok {
-		fmt.Println(reply)
+		fmt.Printf("注册得到的workerId为:%d\n", reply.WorkerId)
 	} else {
 		fmt.Println("call Failed")
 	}
@@ -114,11 +114,12 @@ func RegisterWorkerRPC() (int, error) {
 //
 // the RPC argument and reply types are defined in rpc.go.
 func AskTask(workerId int) *TaskInfo {
+	fmt.Printf("workerId:%d\n 准备开始请求任务", workerId)
 	args := AskArg{workerId}
 	reply := TaskInfo{}
 	ok := call("Coordinator.GetTaskInfo", &args, &reply)
 	if ok {
-		fmt.Println(reply)
+		fmt.Printf("workerId:%d 得到的任务为%v", workerId, reply)
 	} else {
 		fmt.Println("call Failed")
 	}

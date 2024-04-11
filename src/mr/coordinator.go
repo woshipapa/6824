@@ -76,12 +76,18 @@ func (c *Coordinator) GetTaskInfo(args *AskArg, reply *TaskInfo) error {
 		{
 			if len(c.mapTasks) > 0 {
 				index := <-c.mapTasks
-				*reply = *c.taskMap[index]
-				//修改任务信息
-				c.taskMap[index].AssignedWorker = args.WorkerId
-				c.taskMap[index].TaskState = Running
-				c.taskMap[index].StartTime = time.Now()
-				go c.monitorTask(index, args.WorkerId)
+				taskInfo := c.taskMap[index]
+				if taskInfo != nil {
+					// 修改任务信息
+					taskInfo.AssignedWorker = args.WorkerId
+					taskInfo.TaskState = Running
+					taskInfo.StartTime = time.Now()
+					// 将任务信息指针赋值给reply
+					*reply = *taskInfo
+					go c.monitorTask(index, args.WorkerId)
+				} else {
+					reply.TaskType = WaittingTask
+				}
 			} else {
 				// 还处于MapPhase阶段，但是mapTask都分发出去了，说明map的任务没有都完成,此时来请求的worker让他等待
 				reply.TaskType = WaittingTask
@@ -93,11 +99,11 @@ func (c *Coordinator) GetTaskInfo(args *AskArg, reply *TaskInfo) error {
 		{
 			if len(c.reduceTasks) > 0 {
 				index := <-c.reduceTasks
-				*reply = *c.taskMap[index]
 				//修改任务信息
 				c.taskMap[index].AssignedWorker = args.WorkerId
 				c.taskMap[index].TaskState = Running
 				c.taskMap[index].StartTime = time.Now()
+				*reply = *c.taskMap[index]
 			} else {
 				reply.TaskType = WaittingTask
 				return nil
