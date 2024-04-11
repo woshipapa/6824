@@ -301,10 +301,8 @@ func (c *Coordinator) makeMapTasks(files []string, nReduce int) {
 	for i, v := range files {
 		id := i
 		c.mapTasks <- id
-		// 我这里实在src目录下进行的
-		filepaths := []string{"main/" + v}
 		c.taskMap[id] = &TaskInfo{
-			FilePath:  filepaths,
+			FilePath:  []string{v},
 			TaskId:    id,
 			TaskType:  MapTask,
 			NReducer:  nReduce,
