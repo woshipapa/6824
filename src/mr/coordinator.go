@@ -2,7 +2,11 @@ package mr
 
 import (
 	"fmt"
+	"io/fs"
+	"io/ioutil"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -14,7 +18,7 @@ import "net/http"
 type TaskInfo struct {
 	TaskId         int
 	TaskType       TaskType
-	FilePath       string
+	FilePath       []string
 	NReducer       int
 	AssignedWorker int
 	FailedWorkers  []int
@@ -84,9 +88,20 @@ func (c *Coordinator) GetTaskInfo(args *AskArg, reply *TaskInfo) error {
 				return nil
 			}
 		}
+		break
 	case ReducePhase:
 		{
-			//if len(c.reduceTasks) > 0 {}
+			if len(c.reduceTasks) > 0 {
+				index := <-c.reduceTasks
+				*reply = *c.taskMap[index]
+				//修改任务信息
+				c.taskMap[index].AssignedWorker = args.WorkerId
+				c.taskMap[index].TaskState = Running
+				c.taskMap[index].StartTime = time.Now()
+			} else {
+				reply.TaskType = WaittingTask
+				return nil
+			}
 		}
 		break
 	default:
@@ -119,14 +134,18 @@ func (c *Coordinator) MarkFinished(args *DoneArg, reply *DoneReply) error {
 	defer c.mutex.Unlock()
 	rwid := args.WorkerId
 	taskId := args.TaskId
-	task := c.taskMap[taskId]
+	task, exists := c.taskMap[taskId]
+	if !exists {
+		fmt.Printf("Task Id[%d] does not exist.\n", taskId)
+		return nil
+	}
 	switch task.TaskType {
 	case MapTask:
 		if task.TaskState == Running {
 			if rwid == task.AssignedWorker {
 				task.TaskState = Finished
 				fmt.Printf("Map task Id[%d] is finished.\n", task.TaskId)
-				go c.renameFiles(args.TempFiles)
+				c.renameFiles(args.TempFiles)
 			} else {
 				fmt.Printf("Map task Id[%d] is now assigned by worker[%d],not worker[%d]", task.TaskId, task.AssignedWorker, rwid)
 			}
@@ -137,6 +156,25 @@ func (c *Coordinator) MarkFinished(args *DoneArg, reply *DoneReply) error {
 		}
 		if c.allMapTasksFinished() {
 			c.initReduceTasks()
+		}
+		break
+	case ReduceTask:
+		if task.TaskState == Running {
+			if rwid == task.AssignedWorker {
+				task.TaskState = Finished
+				fmt.Printf("Reduce task Id[%d] is finished.\n", task.TaskId)
+				c.renameFiles(args.TempFiles)
+			} else {
+				fmt.Printf("Reduce task Id[%d] is now assigned by worker[%d], not worker[%d]\n", task.TaskId, task.AssignedWorker, rwid)
+			}
+		} else if task.TaskState == Idle {
+			fmt.Printf("The worker[%d] reported after timeout!\n", rwid)
+		} else {
+			fmt.Printf("Reduce task Id[%d] is already finished!\n", task.TaskId)
+		}
+
+		if c.allReduceTasksFinished() {
+			c.finalizeReduceTasks()
 		}
 
 	}
@@ -154,11 +192,26 @@ func (c *Coordinator) allMapTasksFinished() bool {
 	return true
 }
 
+func (c *Coordinator) allReduceTasksFinished() bool {
+	for _, task := range c.taskMap {
+		if task.TaskType == ReduceTask && task.TaskState != Finished {
+			return false
+		}
+	}
+	return true
+}
+
 // initReduceTasks 初始化Reduce任务
 func (c *Coordinator) initReduceTasks() {
 	// 更新阶段为Reduce
-	c.taskPhase = AllDone
+	c.taskPhase = ReducePhase
 	// 这里初始化Reduce任务，例如填充reduceTasks通道和设置任务状态
+	c.makeReduceTasks()
+}
+
+func (c *Coordinator) finalizeReduceTasks() {
+	c.taskPhase = AllDone
+
 }
 
 func (c *Coordinator) renameFiles(renameFiles []RenameFile) {
@@ -230,7 +283,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 		nReducer:     nReduce,
 		mapTasks:     make(chan int, len(files)),
 		reduceTasks:  make(chan int, nReduce),
-		taskMap:      make(map[int]*TaskInfo, len(files)+nReduce),
+		taskMap:      make(map[int]*TaskInfo, len(files)+nReduce), // map + reduce 任务元信息
 		taskPhase:    MapPhase,
 		nextWorkerId: 0,
 	}
@@ -248,9 +301,10 @@ func (c *Coordinator) makeMapTasks(files []string, nReduce int) {
 	for i, v := range files {
 		id := i
 		c.mapTasks <- id
-		v = "main/" + v
+		// 我这里实在src目录下进行的
+		filepaths := []string{"main/" + v}
 		c.taskMap[id] = &TaskInfo{
-			FilePath:  v,
+			FilePath:  filepaths,
 			TaskId:    id,
 			TaskType:  MapTask,
 			NReducer:  nReduce,
@@ -259,4 +313,44 @@ func (c *Coordinator) makeMapTasks(files []string, nReduce int) {
 		fmt.Println("make a map task :", c.taskMap[id])
 	}
 
+}
+
+func (c *Coordinator) makeReduceTasks() {
+	reduceNum := c.nReducer
+	baseId := len(c.files)
+	// 一次性读取当前目录文件
+	path, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("Failed to get working directory: %v", err)
+	}
+
+	files, err := ioutil.ReadDir(path)
+	if err != nil {
+		log.Fatalf("Failed to read directory: %v", err)
+	}
+	for i := 0; i < reduceNum; i++ {
+		task := &TaskInfo{
+			TaskId:         baseId + i,
+			TaskType:       ReduceTask,
+			FilePath:       selectReduceName(files, i),
+			NReducer:       c.nReducer,
+			AssignedWorker: -1,
+			FailedWorkers:  nil,
+			TaskState:      Idle,
+			StartTime:      time.Time{},
+		}
+		c.taskMap[baseId+i] = task
+		c.reduceTasks <- baseId + i
+		fmt.Println("make a reduce task :", c.taskMap[baseId+i])
+	}
+}
+
+func selectReduceName(files []fs.FileInfo, reduceNum int) []string {
+	var s []string
+	for _, file := range files {
+		if strings.HasPrefix(file.Name(), "mr-") && strings.HasSuffix(file.Name(), strconv.Itoa(reduceNum)) {
+			s = append(s, file.Name())
+		}
+	}
+	return s
 }

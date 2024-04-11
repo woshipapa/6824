@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 )
@@ -31,6 +32,20 @@ type RenameFile struct {
 	NewName string
 }
 
+type SortedByKey []KeyValue
+
+func (s SortedByKey) Len() int {
+	return len(s)
+}
+
+func (s SortedByKey) Less(i, j int) bool {
+	return s[i].Key < s[j].Key // 根据Key的字典顺序进行比较
+}
+
+func (s SortedByKey) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
 // use ihash(key) % NReduce to choose the reduce
 // task number for each KeyValue emitted by Map.
 func ihash(key string) int {
@@ -54,11 +69,14 @@ func Worker(mapf func(string, string) []KeyValue,
 		case MapTask:
 			{
 				files := DoMapTask(mapf, task)
+				printRenameFiles(files)
 				CallDone(workId, task.TaskId, files)
 			}
 		case ReduceTask:
 			{
-
+				files := DoReduceTask(reducef, task)
+				printRenameFiles(files)
+				CallDone(workId, task.TaskId, files)
 			}
 		case WaittingTask:
 			{
@@ -75,7 +93,11 @@ func Worker(mapf func(string, string) []KeyValue,
 	// uncomment to send the Example RPC to the coordinator.
 
 }
-
+func printRenameFiles(files []RenameFile) {
+	for _, file := range files {
+		fmt.Printf("Old Name: %s, New Name: %s\n", file.OldName, file.NewName)
+	}
+}
 func RegisterWorkerRPC() (int, error) {
 	args := RegisterArg{}
 	reply := RegisterReply{}
@@ -108,7 +130,7 @@ func CallDone(workerId int, TaskId int, files []RenameFile) {
 	reply := DoneReply{}
 	ok := call("Coordinator.MarkFinished", &args, &reply)
 	if ok {
-		fmt.Println(reply)
+		fmt.Printf("任务ID %d 被成功响应了。\n", TaskId)
 	} else {
 		fmt.Println("call Failed")
 	}
@@ -137,7 +159,7 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 }
 
 func DoMapTask(mapf func(string, string) []KeyValue, task *TaskInfo) []RenameFile {
-	fileName := task.FilePath
+	fileName := task.FilePath[0]
 	file, err := os.Open(fileName)
 	if err != nil {
 		log.Fatalf("cannot open %v", file)
@@ -155,7 +177,9 @@ func DoMapTask(mapf func(string, string) []KeyValue, task *TaskInfo) []RenameFil
 	rn := task.NReducer
 	// 分成reducer个数量的桶
 	HashedKV := make([][]KeyValue, rn)
-	result := make([]RenameFile, rn)
+	//result := make([]RenameFile, rn)
+	//这里导致了空值的出现，初始化了rn个空值后面又append
+	result := make([]RenameFile, 0)
 	for _, kv := range intermediate {
 		i := ihash(kv.Key) % rn
 		HashedKV[i] = append(HashedKV[i], kv)
@@ -180,4 +204,53 @@ func DoMapTask(mapf func(string, string) []KeyValue, task *TaskInfo) []RenameFil
 		tempFile.Close()
 	}
 	return result
+}
+func DoReduceTask(reducef func(string, []string) string, task *TaskInfo) []RenameFile {
+	intermediate := shuffle(task.FilePath)
+	dir, _ := os.Getwd()
+	//tempFile, err := ioutil.TempFile(dir, "mr-tmp-*")
+	tempFile, err := ioutil.TempFile(dir, "mr-tmp-*")
+	if err != nil {
+		log.Fatal("Failed to create temp file", err)
+	}
+	i := 0
+	for i < len(intermediate) {
+		j := i + 1
+		for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
+			j++
+		}
+		var values []string
+		for k := i; k < j; k++ {
+			values = append(values, intermediate[k].Value)
+		}
+		output := reducef(intermediate[i].Key, values)
+		//向文件中写入
+		fmt.Fprintf(tempFile, "%v %v\n", intermediate[i].Key, output)
+		i = j
+	}
+	name := tempFile.Name()
+	response := RenameFile{
+		OldName: name,
+		NewName: "mr-out-" + strconv.Itoa(task.TaskId),
+	}
+	tempFile.Close()
+	return []RenameFile{response}
+}
+func shuffle(files []string) []KeyValue {
+	var kva []KeyValue
+	for _, filepath := range files {
+		file, _ := os.Open(filepath)
+		dec := json.NewDecoder(file)
+		for {
+			var kv KeyValue
+			if err := dec.Decode(&kv); err != nil {
+				break
+			}
+			kva = append(kva, kv)
+
+		}
+		file.Close()
+	}
+	sort.Sort(SortedByKey(kva))
+	return kva
 }
