@@ -130,36 +130,38 @@ func (c *Coordinator) monitorTask(index int, wid int) {
 		state := task.TaskState
 		assignedWorkerId := task.AssignedWorker
 
-		// 日志输出当前监控的任务和工作节点信息
-		log.Printf("Monitoring Task: Index: %d, Assigned Worker: %d, Current Worker: %d, State: %d\n", index, assignedWorkerId, wid, state)
+		if state == Running {
+			if assignedWorkerId == wid {
+				// 如果任务仍在运行状态且分配的worker是当前worker，则认为超时
+				log.Printf("Timeout detected: Task %d assigned to worker %d is not completed in time.\n", task.TaskId, wid)
 
-		if state == Running && assignedWorkerId == wid {
-			// 如果任务仍在运行状态且分配的worker是当前worker，则认为超时
-			log.Printf("Timeout detected: Task %d assigned to worker %d is not completed in time.\n", index, wid)
+				// 重置任务信息
+				task.AssignedWorker = -1
+				task.TaskState = Idle
+				task.StartTime = time.Time{}
+				task.FailedWorkers = append(task.FailedWorkers, wid) // 记录失败的 worker
 
-			// 重置任务信息
-			task.AssignedWorker = -1
-			task.TaskState = Idle
-			task.StartTime = time.Time{}
-			task.FailedWorkers = append(task.FailedWorkers, wid) // 记录失败的 worker
-
-			// 根据任务类型放回相应的队列
-			if task.TaskType == MapTask {
-				c.mapTasks <- index
-				log.Printf("Requeued Map task %d to mapTasks queue.\n", index)
-			} else if task.TaskType == ReduceTask {
-				c.reduceTasks <- index
-				log.Printf("Requeued Reduce task %d to reduceTasks queue.\n", index)
+				// 根据任务类型放回相应的队列
+				if task.TaskType == MapTask {
+					c.mapTasks <- index
+					log.Printf("Requeued Map task %d to mapTasks queue.\n", index)
+				} else if task.TaskType == ReduceTask {
+					c.reduceTasks <- index
+					log.Printf("Requeued Reduce task %d to reduceTasks queue.\n", index)
+				} else {
+					log.Printf("Error: Task %d has unknown type %d.\n", index, task.TaskType)
+				}
 			} else {
-				log.Printf("Error: Task %d has unknown type %d.\n", index, task.TaskType)
+				log.Printf("任务%d已经被分配给worker%d,而不是你worker%d", task.TaskId, assignedWorkerId, wid)
 			}
+			c.mutex.Unlock()
+		} else if state == Finished {
+			log.Printf("任务%d已经完成了", task.TaskId)
 		} else {
-			log.Printf("No requeue needed for task %d on worker %d: either not running or assigned to another worker.\n", index, assignedWorkerId)
+			log.Printf("任务%d目前空闲了,上一个worker%d crash了", task.TaskId, wid)
 		}
-		c.mutex.Unlock()
 	}
 }
-
 func (c *Coordinator) MarkFinished(args *DoneArg, reply *DoneReply) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
