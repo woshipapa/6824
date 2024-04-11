@@ -119,10 +119,10 @@ func (c *Coordinator) monitorTask(index int, wid int) {
 	select {
 	case <-time.After(10 * time.Second): // 等待10秒钟，如果无响应，则认为超时
 		c.mutex.Lock()
+		defer c.mutex.Unlock()
 		task, exists := c.taskMap[index]
 		if !exists {
 			log.Printf("Monitor Error: No task found with index %d for worker %d\n", index, wid)
-			c.mutex.Unlock()
 			return
 		}
 
@@ -154,7 +154,6 @@ func (c *Coordinator) monitorTask(index int, wid int) {
 			} else {
 				log.Printf("任务%d已经被分配给worker%d,而不是你worker%d", task.TaskId, assignedWorkerId, wid)
 			}
-			c.mutex.Unlock()
 		} else if state == Finished {
 			log.Printf("任务%d已经完成了", task.TaskId)
 		} else {
