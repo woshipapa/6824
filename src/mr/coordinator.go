@@ -115,32 +115,49 @@ func (c *Coordinator) GetTaskInfo(args *AskArg, reply *TaskInfo) error {
 	}
 	return nil
 }
-
 func (c *Coordinator) monitorTask(index int, wid int) {
 	select {
-	case <-time.After(10 * time.Second):
+	case <-time.After(10 * time.Second): // 等待10秒钟，如果无响应，则认为超时
 		c.mutex.Lock()
-		defer c.mutex.Unlock()
 		task, exists := c.taskMap[index]
+		if !exists {
+			log.Printf("Monitor Error: No task found with index %d for worker %d\n", index, wid)
+			c.mutex.Unlock()
+			return
+		}
+
+		// 获取任务当前状态以进行条件判断
 		state := task.TaskState
 		assignedWorkerId := task.AssignedWorker
-		taskType := task.TaskType
-		if exists && state == Running && assignedWorkerId == wid {
+
+		// 日志输出当前监控的任务和工作节点信息
+		log.Printf("Monitoring Task: Index: %d, Assigned Worker: %d, Current Worker: %d, State: %d\n", index, assignedWorkerId, wid, state)
+
+		if state == Running && assignedWorkerId == wid {
+			// 如果任务仍在运行状态且分配的worker是当前worker，则认为超时
+			log.Printf("Timeout detected: Task %d assigned to worker %d is not completed in time.\n", index, wid)
+
+			// 重置任务信息
 			task.AssignedWorker = -1
 			task.TaskState = Idle
 			task.StartTime = time.Time{}
-			task.FailedWorkers = append(task.FailedWorkers, wid)
-			switch taskType {
-			case MapTask:
-				go func() { c.mapTasks <- index }()
-			case ReduceTask:
-				go func() { c.reduceTasks <- index }()
-			default:
-				log.Printf("Unknown task type %d for task %d\n", taskType, index)
-			}
-		}
-	}
+			task.FailedWorkers = append(task.FailedWorkers, wid) // 记录失败的 worker
 
+			// 根据任务类型放回相应的队列
+			if task.TaskType == MapTask {
+				c.mapTasks <- index
+				log.Printf("Requeued Map task %d to mapTasks queue.\n", index)
+			} else if task.TaskType == ReduceTask {
+				c.reduceTasks <- index
+				log.Printf("Requeued Reduce task %d to reduceTasks queue.\n", index)
+			} else {
+				log.Printf("Error: Task %d has unknown type %d.\n", index, task.TaskType)
+			}
+		} else {
+			log.Printf("No requeue needed for task %d on worker %d: either not running or assigned to another worker.\n", index, assignedWorkerId)
+		}
+		c.mutex.Unlock()
+	}
 }
 
 func (c *Coordinator) MarkFinished(args *DoneArg, reply *DoneReply) error {
