@@ -104,6 +104,7 @@ func (c *Coordinator) GetTaskInfo(args *AskArg, reply *TaskInfo) error {
 				c.taskMap[index].TaskState = Running
 				c.taskMap[index].StartTime = time.Now()
 				*reply = *c.taskMap[index]
+				go c.monitorTask(index, args.WorkerId)
 			} else {
 				reply.TaskType = WaittingTask
 				return nil
@@ -129,7 +130,7 @@ func (c *Coordinator) monitorTask(index int, wid int) {
 		// 获取任务当前状态以进行条件判断
 		state := task.TaskState
 		assignedWorkerId := task.AssignedWorker
-
+		taskType := task.TaskType
 		if state == Running {
 			if assignedWorkerId == wid {
 				// 如果任务仍在运行状态且分配的worker是当前worker，则认为超时
@@ -142,10 +143,10 @@ func (c *Coordinator) monitorTask(index int, wid int) {
 				task.FailedWorkers = append(task.FailedWorkers, wid) // 记录失败的 worker
 
 				// 根据任务类型放回相应的队列
-				if task.TaskType == MapTask {
+				if taskType == MapTask {
 					c.mapTasks <- index
 					log.Printf("Requeued Map task %d to mapTasks queue.\n", index)
-				} else if task.TaskType == ReduceTask {
+				} else if taskType == ReduceTask {
 					c.reduceTasks <- index
 					log.Printf("Requeued Reduce task %d to reduceTasks queue.\n", index)
 				} else {
