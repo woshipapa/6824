@@ -424,7 +424,8 @@ func (rf *Raft) AppendEntries(targetServerId int, heart bool) {
 			return
 		}
 		args := AppendEntriesArgs{
-			Term: rf.currentTerm,
+			Term:     rf.currentTerm,
+			LeaderId: rf.me,
 		}
 		rf.mu.Unlock()
 
