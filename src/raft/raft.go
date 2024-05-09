@@ -438,7 +438,7 @@ func (rf *Raft) AppendEntries(targetServerId int, heart bool) {
 			rf.mu.Unlock()
 			return
 		}
-		DPrintf("%v: 发送完心跳收到的结果为%v\n", rf.SayMeL(), reply)
+		DPrintf("%v: 发送完心跳收到对方的Term为%d\n", rf.SayMeL(), reply.FollowerTerm)
 		switch {
 		//如果发送心跳的目标方term比当前的大，立即沦落为follower
 		case reply.FollowerTerm > rf.currentTerm:
