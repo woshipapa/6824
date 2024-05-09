@@ -40,7 +40,7 @@ func (rf *Raft) StartElection() {
 	args.LastLogTerm = rf.getLastEntryTerm()
 	args.LastLogIndex = rf.Log.LastLogIndex
 	votes := 1
-
+	flag := 0
 	for i, _ := range rf.peers {
 		if rf.me == i {
 			continue
@@ -70,7 +70,8 @@ func (rf *Raft) StartElection() {
 			}
 
 			votes++
-			if votes > len(rf.peers)/2 && rf.state == Candidate {
+			if flag != 1 && votes > len(rf.peers)/2 && rf.state == Candidate {
+				flag = 1
 				rf.becomeLeader()
 				go rf.StartAppendEntries(true) //当选为leader后立即发送心跳
 			}
