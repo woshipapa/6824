@@ -2,7 +2,6 @@ package raft
 
 import (
 	"math/rand"
-	"strconv"
 	"time"
 )
 
@@ -32,7 +31,7 @@ func (rf *Raft) StartElection() {
 	rf.currentTerm++
 	rf.votedFor = rf.me
 	rf.resetElectionTimer()
-	DPrintf("222", "[%d] attempting an election at term %d...", rf.me, rf.currentTerm)
+	DPrintf("[%d] attempting an election at term %d...", rf.me, rf.currentTerm)
 
 	//开始拉票
 	args := RequestVoteArgs{}
@@ -81,14 +80,14 @@ func (rf *Raft) StartElection() {
 
 func (rf *Raft) becomeLeader() {
 	rf.state = Leader
-	DPrintf("\n%v: [%d] got enough votes, and now is the leader(currentTerm=%d, state=%v)!starting to append heartbeat...\n", rf.SayMeL(), rf.me, rf.currentTerm, rf.state)
+	DPrintf("%v: [%d] got enough votes, and now is the leader(currentTerm=%d, state=%v)!starting to append heartbeat...\n", rf.SayMeL(), rf.me, rf.currentTerm, rf.state)
 }
 
 // 发生在某个follower成为了candidate，要进行投票，它的选举时间超时了
 func (rf *Raft) resetElectionTimer() {
 	rf.lastElection = time.Now()
 	rf.electionTimeout = rf.getElectionTime()
-	DPrintf(strconv.Itoa(222), "%d has refreshed the electionTimeout at term %d to a random value %d...\n", rf.me, rf.currentTerm, rf.electionTimeout/1000000)
+	DPrintf("%d has refreshed the electionTimeout at term %d to a random value %d...\n", rf.me, rf.currentTerm, rf.electionTimeout/1000000)
 }
 
 // 产生一个随机超时时间
