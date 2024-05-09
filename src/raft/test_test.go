@@ -102,22 +102,26 @@ func TestManyElections2A(t *testing.T) {
 
 	DPrintf("现在开始进行多节点的网络断连,上一轮的leader为%d\n", leader)
 	iters := 10
-	for ii := 1; ii < iters; ii++ {
-		// disconnect three nodes
+	for ii := 1; ii <= iters; ii++ { // 修改这里以从 1 开始迭代，直到包括 iters
+		// 随机选择三个节点进行断连
 		i1 := rand.Int() % servers
 		i2 := rand.Int() % servers
 		i3 := rand.Int() % servers
+		DPrintf("第 %d 次迭代：断开节点 %d, %d, %d\n", ii, i1, i2, i3) // 打印断连的节点
+
 		cfg.disconnect(i1)
 		cfg.disconnect(i2)
 		cfg.disconnect(i3)
 
-		// either the current leader should still be alive,
-		// or the remaining four should elect a new one.
-		cfg.checkOneLeader()
+		// 检查领导者的情况，确认系统的弹性
+		leader = cfg.checkOneLeader()
+		DPrintf("第 %d 次迭代后的新领导者为 %d\n", ii, leader) // 打印新的领导者
 
+		// 重新连接之前断开的节点
 		cfg.connect(i1)
 		cfg.connect(i2)
 		cfg.connect(i3)
+		DPrintf("第 %d 次迭代：重连节点 %d, %d, %d\n", ii, i1, i2, i3) // 打印重连的节点
 	}
 
 	cfg.checkOneLeader()
