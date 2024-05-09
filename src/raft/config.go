@@ -45,7 +45,7 @@ type config struct {
 	n           int
 	rafts       []*Raft
 	applyErr    []string // from apply channel readers
-	connected   []bool   // whether each server is on the net
+	connected   []bool   // 某个节点是否断连
 	saved       []*Persister
 	endnames    [][]string            // the port file names each sends to
 	logs        []map[int]interface{} // copy of each server's committed entries
@@ -267,13 +267,11 @@ func (cfg *config) applierSnap(i int, applyCh chan ApplyMsg) {
 	}
 }
 
-//
 // start or re-start a Raft.
 // if one already exists, "kill" it first.
 // allocate new outgoing port file names, and a new
 // state persister, to isolate previous instance of
 // this server. since we cannot really kill it.
-//
 func (cfg *config) start1(i int, applier func(int, chan ApplyMsg)) {
 	cfg.crash1(i)
 
@@ -385,7 +383,7 @@ func (cfg *config) disconnect(i int) {
 
 	cfg.connected[i] = false
 
-	// outgoing ClientEnds
+	// 断掉出站的网络连接
 	for j := 0; j < cfg.n; j++ {
 		if cfg.endnames[i] != nil {
 			endname := cfg.endnames[i][j]
@@ -393,7 +391,7 @@ func (cfg *config) disconnect(i int) {
 		}
 	}
 
-	// incoming ClientEnds
+	// 断掉入站的网络连接
 	for j := 0; j < cfg.n; j++ {
 		if cfg.endnames[j] != nil {
 			endname := cfg.endnames[j][i]
@@ -422,13 +420,11 @@ func (cfg *config) setlongreordering(longrel bool) {
 	cfg.net.LongReordering(longrel)
 }
 
-//
 // check that one of the connected servers thinks
 // it is the leader, and that no other connected
 // server thinks otherwise.
 //
 // try a few times in case re-elections are needed.
-//
 func (cfg *config) checkOneLeader() int {
 	for iters := 0; iters < 10; iters++ {
 		ms := 450 + (rand.Int63() % 100)
@@ -442,7 +438,7 @@ func (cfg *config) checkOneLeader() int {
 				}
 			}
 		}
-
+		//应当是一个任期下，网络连接正常的服务器只有一个leader
 		lastTermWithLeader := -1
 		for term, leaders := range leaders {
 			if len(leaders) > 1 {
@@ -477,10 +473,8 @@ func (cfg *config) checkTerms() int {
 	return term
 }
 
-//
 // check that none of the connected servers
 // thinks it is the leader.
-//
 func (cfg *config) checkNoLeader() {
 	for i := 0; i < cfg.n; i++ {
 		if cfg.connected[i] {
