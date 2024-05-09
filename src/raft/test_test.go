@@ -101,7 +101,7 @@ func TestManyElections2A(t *testing.T) {
 	leader := cfg.checkOneLeader()
 
 	DPrintf("现在开始进行多节点的网络断连,上一轮的leader为%d\n", leader)
-	iters := 10
+	iters := 20
 	for ii := 1; ii <= iters; ii++ { // 修改这里以从 1 开始迭代，直到包括 iters
 		// 随机选择三个节点进行断连
 		i1 := rand.Int() % servers

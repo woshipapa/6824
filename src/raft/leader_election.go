@@ -103,6 +103,7 @@ func (rf *Raft) HandleHeartbeatRPC(args *AppendEntriesArgs, reply *AppendEntries
 	reply.Success = true
 	// 旧任期的leader抛弃掉
 	if args.Term < rf.currentTerm {
+		DPrintf("%v: Rejecting heartbeat from leader %d because its term %d is less than my term %d.\n", rf.SayMeL(), args.LeaderId, args.Term, rf.currentTerm)
 		reply.Success = false
 		return
 	}
