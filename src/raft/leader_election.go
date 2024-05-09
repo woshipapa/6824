@@ -2,7 +2,6 @@ package raft
 
 import (
 	"math/rand"
-	"strconv"
 	"time"
 )
 
@@ -32,7 +31,7 @@ func (rf *Raft) StartElection() {
 	rf.currentTerm++
 	rf.votedFor = rf.me
 	rf.resetElectionTimer()
-	DPrintf("222", "[%d] attempting an election at term %d...", rf.me, rf.currentTerm)
+	DPrintf("[%d] attempting an election at term %d...", rf.me, rf.currentTerm)
 
 	//开始拉票
 	args := RequestVoteArgs{}
@@ -57,12 +56,12 @@ func (rf *Raft) StartElection() {
 			rf.mu.Lock()
 			defer rf.mu.Unlock()
 
-			DPrintf("%v: now receiving a vote from %d with term %d", rf.SayMeL(), serverId, reply.PeerTerm)
+			DPrintf("%v: now receiving a vote from %d with term %d\n", rf.SayMeL(), serverId, reply.PeerTerm)
 			if reply.PeerTerm < rf.currentTerm {
-				DPrintf("%v: 来自%d 在任期 %d 的旧投票，拒绝接受", rf.SayMeL(), serverId, reply.PeerTerm)
+				DPrintf("%v: 来自%d 在任期 %d 的旧投票，拒绝接受\n", rf.SayMeL(), serverId, reply.PeerTerm)
 				return
 			} else if reply.PeerTerm > rf.currentTerm {
-				DPrintf("%v: %d 的任期是 %d, 比我大，变为follower", rf.SayMeL(), serverId, args.Term)
+				DPrintf("%v: %d 的任期是 %d, 比我大，变为follower\n", rf.SayMeL(), serverId, args.Term)
 				rf.state = Follower
 				rf.votedFor = -1
 				rf.currentTerm = reply.PeerTerm
@@ -81,14 +80,14 @@ func (rf *Raft) StartElection() {
 
 func (rf *Raft) becomeLeader() {
 	rf.state = Leader
-	DPrintf("\n%v: [%d] got enough votes, and now is the leader(currentTerm=%d, state=%v)!starting to append heartbeat...\n", rf.SayMeL(), rf.me, rf.currentTerm, rf.state)
+	DPrintf("%v: [%d] got enough votes, and now is the leader(currentTerm=%d, state=%v)!starting to append heartbeat...\n", rf.SayMeL(), rf.me, rf.currentTerm, rf.state)
 }
 
 // 发生在某个follower成为了candidate，要进行投票，它的选举时间超时了
 func (rf *Raft) resetElectionTimer() {
 	rf.lastElection = time.Now()
 	rf.electionTimeout = rf.getElectionTime()
-	DPrintf(strconv.Itoa(222), "%d has refreshed the electionTimeout at term %d to a random value %d...\n", rf.me, rf.currentTerm, rf.electionTimeout/1000000)
+	DPrintf("%d has refreshed the electionTimeout at term %d to a random value %d...\n", rf.me, rf.currentTerm, rf.electionTimeout/1000000)
 }
 
 // 产生一个随机超时时间

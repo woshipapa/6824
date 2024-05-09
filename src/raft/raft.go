@@ -222,14 +222,14 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.PeerTerm = rf.currentTerm
 		rf.state = Follower
 		rf.resetElectionTimer() //这个节点应当重置选举超时时间
-		fmt.Printf("%v: 投出同意票给节点 %d\n", rf.SayMeL(), args.CandidateId)
+		DPrintf("%v: 投出同意票给节点 %d\n", rf.SayMeL(), args.CandidateId)
 		rf.persist()
 	} else {
 		// 不满足以上条件，拒绝投票
 		reply.VoteGranted = false
 		reply.PeerTerm = rf.currentTerm
 
-		fmt.Printf("%v: 投出反对票给节点 %d\n", rf.SayMeL(), args.CandidateId)
+		DPrintf("%v: 投出反对票给节点 %d\n", rf.SayMeL(), args.CandidateId)
 
 	}
 	return
