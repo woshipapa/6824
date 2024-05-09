@@ -30,7 +30,7 @@ func (rf *Raft) StartElection() {
 	rf.state = Candidate
 	rf.currentTerm++
 	rf.votedFor = rf.me
-	rf.resetElectionTimer()
+	rf.resetElectionTimer() //开始新一轮选举时，重置自己的选举超时时间
 	DPrintf("[%d] attempting an election at term %d...\n", rf.me, rf.currentTerm)
 
 	//开始拉票
@@ -109,7 +109,7 @@ func (rf *Raft) HandleHeartbeatRPC(args *AppendEntriesArgs, reply *AppendEntries
 	//DPrintf(200, "I am %d and the dead state is %d with term %d", rf.me)
 	DPrintf("%v: I am now receiving heartbeat from leader %d and dead state is %d with term is %d\n", rf.SayMeL(), args.LeaderId, rf.dead, args.Term)
 	rf.resetElectionTimer()
-	// 需要转变自己的身份为Follower
+	// 需要转变自己的身份为Follower,有leader产生了
 	rf.state = Follower
 	// 承认来者是个合法的新leader，则任期一定大于自己，此时需要设置votedFor为-1以及
 	if args.Term > rf.currentTerm {
