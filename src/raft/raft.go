@@ -237,8 +237,9 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 func (rf *Raft) SayMeL() string {
 
-	return fmt.Sprintf("[Server %v as %v at term %v with votedFor %d, FirstLogIndex %d, LastLogIndex %d,  commitIndex %d, and lastApplied %d]： + \n",
-		rf.me, rf.state, rf.currentTerm, rf.votedFor, rf.Log.FirstLogIndex, rf.Log.LastLogIndex, rf.commitIndex, rf.lastApplied)
+	//return fmt.Sprintf("[Server %v as %v at term %v with votedFor %d, FirstLogIndex %d, LastLogIndex %d,  commitIndex %d, and lastApplied %d]： + \n",
+	//	rf.me, rf.state, rf.currentTerm, rf.votedFor, rf.Log.FirstLogIndex, rf.Log.LastLogIndex, rf.commitIndex, rf.lastApplied)
+	return fmt.Sprintf("[Server %v]: ", rf.me)
 	//return "success"
 }
 
