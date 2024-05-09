@@ -31,7 +31,7 @@ func (rf *Raft) StartElection() {
 	rf.currentTerm++
 	rf.votedFor = rf.me
 	rf.resetElectionTimer()
-	DPrintf("[%d] attempting an election at term %d...", rf.me, rf.currentTerm)
+	DPrintf("[%d] attempting an election at term %d...\n", rf.me, rf.currentTerm)
 
 	//开始拉票
 	args := RequestVoteArgs{}
@@ -107,7 +107,7 @@ func (rf *Raft) HandleHeartbeatRPC(args *AppendEntriesArgs, reply *AppendEntries
 		return
 	}
 	//DPrintf(200, "I am %d and the dead state is %d with term %d", rf.me)
-	DPrintf("%v: I am now receiving heartbeat from leader %d and dead state is %d\n", rf.SayMeL(), args.LeaderId, rf.dead)
+	DPrintf("%v: I am now receiving heartbeat from leader %d and dead state is %d with term is %d\n", rf.SayMeL(), args.LeaderId, rf.dead, args.Term)
 	rf.resetElectionTimer()
 	// 需要转变自己的身份为Follower
 	rf.state = Follower

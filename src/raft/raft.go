@@ -226,6 +226,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.persist()
 	} else {
 		// 不满足以上条件，拒绝投票
+		// 一个candidate在拉票时，如果另一个也变成candidate跟他拉票，明显是拒绝的
 		reply.VoteGranted = false
 		reply.PeerTerm = rf.currentTerm
 
@@ -436,7 +437,7 @@ func (rf *Raft) AppendEntries(targetServerId int, heart bool) {
 			rf.mu.Unlock()
 			return
 		}
-
+		DPrintf("%v: 发送完心跳收到的结果为%v\n", rf.SayMeL(), reply)
 		switch {
 		//如果发送心跳的目标方term比当前的大，立即沦落为follower
 		case reply.FollowerTerm > rf.currentTerm:
