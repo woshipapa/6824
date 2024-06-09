@@ -297,9 +297,12 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 // term. the third return value is true if this server believes it is
 // the leader.
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
 	index := rf.Log.LastLogIndex + 1 //LastLogIndex就指向了最后一个日志的索引位置
 	term := rf.currentTerm
-	isLeader := rf.state == Leader
+	isLeader := (rf.state == Leader)
 
 	// Your code here (2B).
 	if isLeader {
@@ -311,13 +314,14 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		rf.Log.LastLogIndex = index
 		rf.nextIndex[rf.me]++
 		rf.matchIndex[rf.me] = rf.nextIndex[rf.me] - 1
+		DPrintf("Leader %d added a new log entry at index %d with term %d, command: %v", rf.me, index, term, command)
 		for peer := range rf.peers {
 			if peer == rf.me {
 				continue
 			}
 			go rf.AppendEntries(peer, false, rf.Log.Entries)
 		}
-		DPrintf("Leader %d added a new log entry at index %d with term %d, command: %v", rf.me, index, term, command)
+
 	}
 	return index, term, isLeader
 }
