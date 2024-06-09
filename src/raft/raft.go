@@ -318,12 +318,14 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		rf.nextIndex[rf.me]++
 		rf.matchIndex[rf.me] = rf.nextIndex[rf.me] - 1
 		DPrintf("Leader %d added a new log entry at index %d with term %d, command: %v", rf.me, index, term, command)
+		appendNums := 1
 		for peer := range rf.peers {
 			if peer == rf.me {
 				continue
 			}
+
 			DPrintf("Leader %d ------->  follower %d", rf.me, peer)
-			go rf.AppendEntries(peer, false, rf.Log.Entries)
+			go rf.sendLogAppendEntries(peer, &appendNums)
 		}
 
 	}
@@ -440,6 +442,42 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	return rf
 }
 
+func (rf *Raft) sendLogAppendEntries(targetServerId int, appendNums *int) {
+	//发送最新的log
+	rf.mu.Lock()
+	if rf.state != Leader {
+		rf.mu.Unlock()
+		return
+	}
+
+	prevLogIndex := rf.nextIndex[targetServerId] - 1
+	prevLogTerm := -1
+	if prevLogIndex >= 0 {
+		prevLogTerm = rf.Log.Entries[prevLogIndex].Term
+	}
+	entries := append([]Entry{}, rf.Log.Entries[rf.nextIndex[targetServerId]:]...)
+	args := AppendEntriesArgs{
+		Term:         rf.currentTerm,
+		LeaderId:     rf.me,
+		PrevLogIndex: prevLogIndex,
+		PrevLogTerm:  prevLogTerm,
+		LeaderCommit: rf.commitIndex,
+		Logs:         entries,
+	}
+	rf.mu.Unlock() // Release lock before I/O operation
+
+	var reply AppendEntriesReply
+	if rf.sendRequestAppendEntries(false, targetServerId, &args, &reply) {
+		rf.mu.Lock() // Re-acquire lock to handle the reply
+		DPrintf("Leader %d received a reply from %d for AppendEntries: Success=%v", rf.me, targetServerId, reply.Success)
+		if rf.state == Leader { // Double-check the state
+			rf.handleAppendEntriesReply(targetServerId, &args, &reply, appendNums)
+		}
+		rf.mu.Unlock()
+	}
+
+}
+
 func (rf *Raft) AppendEntries(targetServerId int, heart bool, entries []Entry) {
 
 	if heart {
@@ -482,38 +520,38 @@ func (rf *Raft) AppendEntries(targetServerId int, heart bool, entries []Entry) {
 		}
 		rf.mu.Unlock()
 	} else {
-		//发送最新的log
-		rf.mu.Lock()
-		if rf.state != Leader {
-			rf.mu.Unlock()
-			return
-		}
-
-		prevLogIndex := rf.nextIndex[targetServerId] - 1
-		prevLogTerm := -1
-		if prevLogIndex >= 0 {
-			prevLogTerm = rf.Log.Entries[prevLogIndex].Term
-		}
-		entries := append([]Entry{}, rf.Log.Entries[rf.nextIndex[targetServerId]:]...)
-		args := AppendEntriesArgs{
-			Term:         rf.currentTerm,
-			LeaderId:     rf.me,
-			PrevLogIndex: prevLogIndex,
-			PrevLogTerm:  prevLogTerm,
-			LeaderCommit: rf.commitIndex,
-			Logs:         entries,
-		}
-		rf.mu.Unlock() // Release lock before I/O operation
-
-		var reply AppendEntriesReply
-		if rf.sendRequestAppendEntries(false, targetServerId, &args, &reply) {
-			rf.mu.Lock() // Re-acquire lock to handle the reply
-			DPrintf("Leader %d received a reply from %d for AppendEntries: Success=%v", rf.me, targetServerId, reply.Success)
-			if rf.state == Leader { // Double-check the state
-				rf.handleAppendEntriesReply(targetServerId, &args, &reply)
-			}
-			rf.mu.Unlock()
-		}
+		////发送最新的log
+		//rf.mu.Lock()
+		//if rf.state != Leader {
+		//	rf.mu.Unlock()
+		//	return
+		//}
+		//
+		//prevLogIndex := rf.nextIndex[targetServerId] - 1
+		//prevLogTerm := -1
+		//if prevLogIndex >= 0 {
+		//	prevLogTerm = rf.Log.Entries[prevLogIndex].Term
+		//}
+		//entries := append([]Entry{}, rf.Log.Entries[rf.nextIndex[targetServerId]:]...)
+		//args := AppendEntriesArgs{
+		//	Term:         rf.currentTerm,
+		//	LeaderId:     rf.me,
+		//	PrevLogIndex: prevLogIndex,
+		//	PrevLogTerm:  prevLogTerm,
+		//	LeaderCommit: rf.commitIndex,
+		//	Logs:         entries,
+		//}
+		//rf.mu.Unlock() // Release lock before I/O operation
+		//
+		//var reply AppendEntriesReply
+		//if rf.sendRequestAppendEntries(false, targetServerId, &args, &reply) {
+		//	rf.mu.Lock() // Re-acquire lock to handle the reply
+		//	DPrintf("Leader %d received a reply from %d for AppendEntries: Success=%v", rf.me, targetServerId, reply.Success)
+		//	if rf.state == Leader { // Double-check the state
+		//		rf.handleAppendEntriesReply(targetServerId, &args, &reply,appendNums)
+		//	}
+		//	rf.mu.Unlock()
+		//}
 
 	}
 }

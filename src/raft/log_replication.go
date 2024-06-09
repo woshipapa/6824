@@ -1,7 +1,5 @@
 package raft
 
-import "sort"
-
 /*
 *
 接收方收到日志更新的RPC
@@ -74,9 +72,10 @@ func (rf *Raft) applyLogs() {
 		rf.applyCh <- applyMsg
 	}
 }
-func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
+func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntriesArgs, reply *AppendEntriesReply, appendNums *int) {
 	//rf.mu.Lock()
 	//defer rf.mu.Unlock()
+	// 死锁了这里
 
 	if rf.state != Leader {
 		return
@@ -91,11 +90,23 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 	}
 
 	if reply.Success {
-		DPrintf("AppendEntries from leader %d to follower %d was successful, updating nextIndex to %d and matchIndex to %d", rf.me, targetServerId, args.PrevLogIndex+1+len(args.Logs), args.PrevLogIndex+len(args.Logs))
-		// AppendEntries请求成功，更新nextIndex和matchIndex
 		rf.nextIndex[targetServerId] = args.PrevLogIndex + 1 + len(args.Logs)
 		rf.matchIndex[targetServerId] = rf.nextIndex[targetServerId] - 1
-		rf.updateCommitIndex()
+
+		if reply.FollowerTerm == rf.currentTerm && *appendNums <= len(rf.peers)/2 {
+			(*appendNums)++
+			DPrintf("Leader %d received successful AppendEntries reply from follower %d; incremented success count to %d", rf.me, targetServerId, *appendNums)
+		} else {
+			DPrintf("Leader %d received successful AppendEntries reply from follower %d but either term mismatch or majority already achieved", rf.me, targetServerId)
+		}
+
+		DPrintf("Leader %d updated nextIndex to %d and matchIndex to %d for follower %d after successful AppendEntries", rf.me, rf.nextIndex[targetServerId], rf.matchIndex[targetServerId], targetServerId)
+
+		if *appendNums > len(rf.peers)/2 {
+			DPrintf("Leader %d has achieved majority of successful AppendEntries, applying logs to state machine", rf.me)
+			*appendNums = 0
+			rf.applyLogs()
+		}
 	} else {
 		index := reply.ConflictIndex
 		term := reply.ConflictTerm
@@ -123,19 +134,7 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 	}
 
 }
-func (rf *Raft) updateCommitIndex() {
-	// 复制一个matchIndex的副本进行排序，以便不阻塞其他操作
-	matchCopy := append([]int(nil), rf.matchIndex...)
-	sort.Ints(matchCopy)
-	N := matchCopy[len(matchCopy)/2] // 获得中位数，即多数派已经复制的最高日志索引
 
-	// 检查N是否大于commitIndex且N对应的日志条目任期等于currentTerm
-	// 只有在当前任期的日志条目可以被提交
-	if N > rf.commitIndex && rf.Log.Entries[N].Term == rf.currentTerm {
-		rf.commitIndex = N
-		rf.applyLogs() // 应用到状态机
-	}
-}
 func (rf *Raft) findFirstIndexOfTerm(term int) int {
 	for i := len(rf.Log.Entries) - 1; i >= 0; i-- {
 		if rf.Log.Entries[i].Term != term {
