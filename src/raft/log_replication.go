@@ -103,9 +103,19 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 		DPrintf("Leader %d updated nextIndex to %d and matchIndex to %d for follower %d after successful AppendEntries", rf.me, rf.nextIndex[targetServerId], rf.matchIndex[targetServerId], targetServerId)
 
 		if *appendNums > len(rf.peers)/2 {
-			DPrintf("Leader %d has achieved majority of successful AppendEntries, applying logs to state machine", rf.me)
 			*appendNums = 0
-			rf.applyLogs()
+			for rf.lastApplied < len(rf.Log.Entries)-1 {
+				rf.lastApplied++
+				applyMsg := ApplyMsg{
+					CommandValid: true,
+					Command:      rf.Log.Entries[rf.lastApplied].Command,
+					CommandIndex: rf.lastApplied,
+				}
+				rf.applyCh <- applyMsg
+				rf.commitIndex = rf.lastApplied
+				//fmt.Printf("[	sendAppendEntries func-rf(%v)	] commitLog  \n", rf.me)
+			}
+			DPrintf("Leader %d has achieved majority of successful AppendEntries, applying logs to state machine", rf.me)
 		}
 	} else {
 		index := reply.ConflictIndex
