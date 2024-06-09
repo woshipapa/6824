@@ -484,9 +484,11 @@ func (rf *Raft) AppendEntries(targetServerId int, heart bool, entries []Entry) {
 		if rf.state != Leader {
 			return
 		}
-		prevLogIndex := rf.nextIndex[targetServerId] - 1
-		prevLogTerm := rf.Log.Entries[prevLogIndex].Term
-
+		prevLogIndex := rf.nextIndex[targetServerId] - 1 //在刚开始的时候，这里因为nextIndex会是0，期望从第一个位置开始放，导致prev会是-1
+		prevLogTerm := -1
+		if prevLogIndex != -1 {
+			prevLogTerm = rf.Log.Entries[prevLogIndex].Term
+		}
 		entries := []Entry{}
 		// [nextIndex,LastIndex]之内的所有log发过去
 		if rf.nextIndex[targetServerId] <= rf.Log.LastLogIndex {
