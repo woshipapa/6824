@@ -1,5 +1,7 @@
 package raft
 
+import "sort"
+
 /*
 *
 接收方收到日志更新的RPC
@@ -19,6 +21,7 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	}
 	rf.state = Follower
 	// 重置选举计时器，因为收到了有效的AppendEntries RPC
+	DPrintf("follower %d 收到了 leader的日志复制请求，进行选举时间的刷新", rf.me)
 	rf.resetElectionTimer()
 	if args.PrevLogIndex > rf.Log.LastLogIndex {
 		//follower的日志短于leader的，这里是follower的日志缺少了miss一部分
@@ -52,7 +55,7 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	//加入收到的leader发来的新日志
 	rf.Log.Entries = append(rf.Log.Entries, args.Logs...)
 	rf.Log.LastLogIndex = len(rf.Log.Entries) - 1
-	DPrintf("Node %d appended new entries from leader; last log index now %d", rf.me, rf.Log.LastLogIndex)
+	DPrintf("Node %d appended new entries from leader %d; last log index now %d", rf.me, args.LeaderId, rf.Log.LastLogIndex)
 	if args.LeaderCommit > rf.commitIndex {
 		//说明该把 [rf.lastapplied,args.LeaderCommit]这部分的指令去应用到状态机中
 		rf.commitIndex = args.LeaderCommit
@@ -65,7 +68,7 @@ func (rf *Raft) applyLogs() {
 		rf.lastApplied++
 		applyMsg := ApplyMsg{
 			CommandValid: true,
-			Command:      rf.Log.Entries[rf.lastApplied],
+			Command:      rf.Log.Entries[rf.lastApplied].Command,
 			CommandIndex: rf.lastApplied,
 		}
 		rf.applyCh <- applyMsg
@@ -92,7 +95,7 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 		// AppendEntries请求成功，更新nextIndex和matchIndex
 		rf.nextIndex[targetServerId] = args.PrevLogIndex + 1 + len(args.Logs)
 		rf.matchIndex[targetServerId] = rf.nextIndex[targetServerId] - 1
-
+		rf.updateCommitIndex()
 	} else {
 		index := reply.ConflictIndex
 		term := reply.ConflictTerm
@@ -120,7 +123,19 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 	}
 
 }
+func (rf *Raft) updateCommitIndex() {
+	// 复制一个matchIndex的副本进行排序，以便不阻塞其他操作
+	matchCopy := append([]int(nil), rf.matchIndex...)
+	sort.Ints(matchCopy)
+	N := matchCopy[len(matchCopy)/2] // 获得中位数，即多数派已经复制的最高日志索引
 
+	// 检查N是否大于commitIndex且N对应的日志条目任期等于currentTerm
+	// 只有在当前任期的日志条目可以被提交
+	if N > rf.commitIndex && rf.Log.Entries[N].Term == rf.currentTerm {
+		rf.commitIndex = N
+		rf.applyLogs() // 应用到状态机
+	}
+}
 func (rf *Raft) findFirstIndexOfTerm(term int) int {
 	for i := len(rf.Log.Entries) - 1; i >= 0; i-- {
 		if rf.Log.Entries[i].Term != term {

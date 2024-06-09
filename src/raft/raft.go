@@ -303,6 +303,9 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	index := rf.Log.LastLogIndex + 1 //LastLogIndex就指向了最后一个日志的索引位置
 	term := rf.currentTerm
 	isLeader := (rf.state == Leader)
+	if rf.killed() {
+		return -1, -1, false
+	}
 
 	// Your code here (2B).
 	if isLeader {

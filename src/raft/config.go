@@ -573,7 +573,7 @@ func (cfg *config) one(cmd interface{}, expectedServers int, retry bool) int {
 			cfg.mu.Unlock()
 			if rf != nil {
 				index1, _, ok := rf.Start(cmd)
-				DPrintf("config: 服务器 %d 尝试提交命令，返回索引 %v，::是否领导者 %v", starts, index1, ok)
+				DPrintf("config: 服务器 %d 尝试提交命令，返回索引 %v，是否领导者 %v", starts, index1, ok)
 				if ok {
 					index = index1
 					break
