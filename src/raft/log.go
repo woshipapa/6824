@@ -20,7 +20,7 @@ func (rf *Raft) getLastEntryTerm() int {
 func NewLog() *Log {
 	return &Log{
 		Entries:       make([]Entry, 0),
-		LastLogIndex:  0,
-		FirstLogIndex: 1,
+		LastLogIndex:  -1,
+		FirstLogIndex: 0,
 	}
 }

@@ -88,6 +88,7 @@ type Raft struct {
 	nextIndex  []int // 对于每一个server，需要发送给他下一个日志条目的索引值（初始化为leader日志index+1,那么范围就对标len） 记录每一个服务器日志更新的进度
 	matchIndex []int // 对于每一个server，已经复制给该server的最后日志条目下标
 
+	applyCh chan ApplyMsg
 }
 
 type AppendEntriesArgs struct {
@@ -95,7 +96,7 @@ type AppendEntriesArgs struct {
 	LeaderId     int
 	PrevLogIndex int // 领导者认为的follower上次日志更新到的最后一个索引位置
 	PrevLogTerm  int
-	Logs         []ApplyMsg
+	Logs         []Entry
 	LeaderCommit int // Leader已经提交的最高的日志的索引
 }
 
@@ -296,12 +297,28 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 // term. the third return value is true if this server believes it is
 // the leader.
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
-	isLeader := true
+	index := rf.Log.LastLogIndex + 1 //LastLogIndex就指向了最后一个日志的索引位置
+	term := rf.currentTerm
+	isLeader := rf.state == Leader
 
 	// Your code here (2B).
-
+	if isLeader {
+		entry := Entry{
+			Term:    term,
+			Command: command,
+		}
+		rf.Log.Entries = append(rf.Log.Entries, entry)
+		rf.Log.LastLogIndex = index
+		rf.nextIndex[rf.me]++
+		rf.matchIndex[rf.me] = rf.nextIndex[rf.me] - 1
+		for peer := range rf.peers {
+			if peer == rf.me {
+				continue
+			}
+			go rf.AppendEntries(peer, false, rf.Log.Entries)
+		}
+		DPrintf("Leader %d added a new log entry at index %d with term %d, command: %v", rf.me, index, term, command)
+	}
 	return index, term, isLeader
 }
 
@@ -369,7 +386,7 @@ func (rf *Raft) StartAppendEntries(heart bool) {
 		if i == rf.me {
 			continue
 		}
-		go rf.AppendEntries(i, true)
+		go rf.AppendEntries(i, true, []Entry{})
 	}
 }
 
@@ -401,10 +418,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.matchIndex = make([]int, len(rf.peers))
 	rf.resetElectionTimer() //初始化上次选举超时时间和上次接收到leader/candidate RPC的时间
 	rf.resetHeartBeatTimeOut()
-	rf.commitIndex = 0
-	rf.lastApplied = 0
+	rf.commitIndex = -1
+	rf.lastApplied = -1
 	rf.heartbeatTimeout = heartbeatTimeout
 	rf.Log = NewLog()
+	rf.applyCh = applyCh
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
@@ -414,7 +432,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	return rf
 }
 
-func (rf *Raft) AppendEntries(targetServerId int, heart bool) {
+func (rf *Raft) AppendEntries(targetServerId int, heart bool, entries []Entry) {
 
 	if heart {
 		rf.mu.Lock()
@@ -455,6 +473,35 @@ func (rf *Raft) AppendEntries(targetServerId int, heart bool) {
 			}
 		}
 		rf.mu.Unlock()
+	} else {
+		//发送最新的log
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
+		if rf.state != Leader {
+			return
+		}
+		prevLogIndex := rf.nextIndex[targetServerId] - 1
+		prevLogTerm := rf.Log.Entries[prevLogIndex].Term
+
+		entries := []Entry{}
+		// [nextIndex,LastIndex]之内的所有log发过去
+		if rf.nextIndex[targetServerId] <= rf.Log.LastLogIndex {
+			entries = append(entries, rf.Log.Entries[rf.nextIndex[targetServerId]:]...)
+		}
+
+		args := AppendEntriesArgs{
+			Term:         rf.currentTerm,
+			LeaderId:     rf.me,
+			PrevLogIndex: prevLogIndex,
+			PrevLogTerm:  prevLogTerm,
+			LeaderCommit: rf.commitIndex,
+			Logs:         entries,
+		}
+		var reply AppendEntriesReply
+		if rf.sendRequestAppendEntries(false, targetServerId, &args, &reply) {
+			rf.handleAppendEntriesReply(targetServerId, &args, &reply)
+		}
+
 	}
 
 }
