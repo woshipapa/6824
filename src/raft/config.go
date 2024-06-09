@@ -566,14 +566,19 @@ func (cfg *config) one(cmd interface{}, expectedServers int, retry bool) int {
 			cfg.mu.Lock()
 			if cfg.connected[starts] {
 				rf = cfg.rafts[starts]
+				DPrintf("config: 尝试服务器 %d 作为领导者", starts)
+			} else {
+				DPrintf("config: 服务器 %d 当前未连接", starts)
 			}
 			cfg.mu.Unlock()
 			if rf != nil {
 				index1, _, ok := rf.Start(cmd)
-				DPrintf("config: 当前新增加的日志index为%v", index1)
+				DPrintf("config: 服务器 %d 尝试提交命令，返回索引 %v，任期 %v，是否领导者 %v", starts, index1, term, ok)
 				if ok {
 					index = index1
 					break
+				} else {
+					DPrintf("config: 服务器 %d 不是领导者或提交失败", starts)
 				}
 			}
 		}
