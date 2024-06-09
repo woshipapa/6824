@@ -498,7 +498,12 @@ func (cfg *config) nCommitted(index int) (int, interface{}) {
 		cfg.mu.Lock()
 		cmd1, ok := cfg.logs[i][index]
 		cfg.mu.Unlock()
-
+		// 添加调试信息来显示从每个节点获取的日志条目信息
+		if ok {
+			fmt.Printf("Node %d has the log entry at index %d with command: %v\n", i, index, cmd1)
+		} else {
+			fmt.Printf("Node %d does not have a log entry at index %d\n", i, index)
+		}
 		if ok {
 			if count > 0 && cmd != cmd1 {
 				cfg.t.Fatalf("committed values do not match: index %v, %v, %v",
@@ -508,6 +513,7 @@ func (cfg *config) nCommitted(index int) (int, interface{}) {
 			cmd = cmd1
 		}
 	}
+
 	return count, cmd
 }
 
