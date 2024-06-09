@@ -497,7 +497,7 @@ func (rf *Raft) AppendEntries(targetServerId int, heart bool, entries []Entry) {
 		if rf.nextIndex[targetServerId] <= rf.Log.LastLogIndex {
 			entries = append(entries, rf.Log.Entries[rf.nextIndex[targetServerId]:]...)
 		}
-
+		DPrintf("Leader %d is sending AppendEntries to %d: PrevLogIndex=%d, EntriesCount=%d", rf.me, targetServerId, prevLogIndex, len(entries))
 		args := AppendEntriesArgs{
 			Term:         rf.currentTerm,
 			LeaderId:     rf.me,
@@ -508,6 +508,7 @@ func (rf *Raft) AppendEntries(targetServerId int, heart bool, entries []Entry) {
 		}
 		var reply AppendEntriesReply
 		if rf.sendRequestAppendEntries(false, targetServerId, &args, &reply) {
+			DPrintf("Leader %d received a reply from %d for AppendEntries: Success=%v", rf.me, targetServerId, reply.Success)
 			rf.handleAppendEntriesReply(targetServerId, &args, &reply)
 		}
 
