@@ -75,8 +75,8 @@ func (rf *Raft) applyLogs() {
 	}
 }
 func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	//rf.mu.Lock()
+	//defer rf.mu.Unlock()
 
 	if rf.state != Leader {
 		return
