@@ -79,9 +79,24 @@ func (rf *Raft) StartElection() {
 	}
 }
 
+// 成为领导者后，要更新nextIndex和matchIndex
 func (rf *Raft) becomeLeader() {
 	rf.state = Leader
 	DPrintf("%v: [%d] got enough votes, and now is the leader(currentTerm=%d, state=%v)!starting to append heartbeat...\n", rf.SayMeL(), rf.me, rf.currentTerm, rf.state)
+	lastIndex := rf.Log.LastLogIndex // 日志索引从0开始，因此最后一个索引是长度减一
+
+	// 初始化nextIndex
+	//rf.nextIndex = make([]int, len(rf.peers))
+	for i := range rf.nextIndex {
+		rf.nextIndex[i] = lastIndex + 1 // 下一个要发送的日志条目是最后一个索引加一
+	}
+
+	// 初始化matchIndex
+	//rf.matchIndex = make([]int, len(rf.peers))
+	for i := range rf.matchIndex {
+		rf.matchIndex[i] = -1 // 开始时没有任何日志条目被确认复制
+	}
+
 }
 
 // 发生在某个follower成为了candidate，要进行投票，它的选举时间超时了

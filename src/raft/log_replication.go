@@ -20,7 +20,6 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	rf.state = Follower
 	// 重置选举计时器，因为收到了有效的AppendEntries RPC
 	rf.resetElectionTimer()
-
 	if args.PrevLogIndex > rf.Log.LastLogIndex {
 		//follower的日志短于leader的，这里是follower的日志缺少了miss一部分
 		reply.Success = false
@@ -30,8 +29,9 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 		return
 	}
 	if args.PrevLogIndex <= rf.Log.LastLogIndex {
+
 		//这里是follower的日志多了一部分
-		if rf.Log.Entries[args.PrevLogIndex].Term != args.PrevLogTerm {
+		if args.PrevLogIndex != -1 && rf.Log.Entries[args.PrevLogIndex].Term != args.PrevLogTerm {
 			reply.Success = false
 			reply.FollowerTerm = rf.currentTerm
 			reply.ConflictTerm = rf.Log.Entries[args.PrevLogIndex].Term //当前follower的最后一条日志条录的term，但是他与当前leader认为相同位置的日志条目term不同
