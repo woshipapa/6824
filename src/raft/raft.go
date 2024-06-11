@@ -481,7 +481,7 @@ func (rf *Raft) sendLogAppendEntries(targetServerId int) {
 
 	prevLogIndex := min(rf.nextIndex[targetServerId]-1, rf.Log.LastLogIndex)
 	prevLogTerm := rf.getEntryTerm(prevLogIndex)
-
+	//这里是有可能是空的新增目录，就是因为他按照ticker协程的间隔去发送时，如果不是心跳，而且又没有新的命令就会出现这种情况
 	entries := append([]Entry{}, rf.Log.Entries[rf.Log.getRealIndex(prevLogIndex+1):]...)
 	args := AppendEntriesArgs{
 		Term:         rf.currentTerm,

@@ -13,7 +13,7 @@ type Log struct {
 
 func (rf *Raft) getLastEntryTerm() int {
 	if rf.Log.LastLogIndex >= rf.Log.FirstLogIndex {
-		return rf.Log.Entries[rf.Log.LastLogIndex].Term
+		return rf.getEntryTerm(rf.Log.LastLogIndex)
 	}
 	return -1
 }

@@ -51,9 +51,12 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	//可能日志后面有冲突的，先把后面的都清掉 保留了一致的部分[0,PrevLogIndex-1]
 	rf.Log.Entries = rf.Log.Entries[:args.PrevLogIndex]
 	//加入收到的leader发来的新日志
-	rf.Log.Entries = append(rf.Log.Entries, args.Logs...)
-	rf.Log.LastLogIndex = len(rf.Log.Entries)
-	DPrintf("Node %d appended new entries from leader %d; last log index now %d", rf.me, args.LeaderId, rf.Log.LastLogIndex)
+	if len(args.Logs) != 0 {
+		//避免重复，因为和之前是相同的
+		rf.Log.Entries = append(rf.Log.Entries, args.Logs...)
+		rf.Log.LastLogIndex = len(rf.Log.Entries)
+		DPrintf("Node %d appended new entries from leader %d; last log index now %d", rf.me, args.LeaderId, rf.Log.LastLogIndex)
+	}
 	if args.LeaderCommit > rf.commitIndex {
 		//说明该把 [rf.lastapplied,args.LeaderCommit]这部分的指令去应用到状态机中
 		rf.commitIndex = min(args.LeaderCommit, rf.Log.LastLogIndex)
