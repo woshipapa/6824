@@ -94,7 +94,7 @@ func (rf *Raft) becomeLeader() {
 	// 初始化matchIndex
 	//rf.matchIndex = make([]int, len(rf.peers))
 	for i := range rf.matchIndex {
-		rf.matchIndex[i] = -1 // 开始时没有任何日志条目被确认复制
+		rf.matchIndex[i] = 0 // 开始时没有任何日志条目被确认复制
 	}
 
 }

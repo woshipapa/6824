@@ -32,7 +32,7 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	if args.PrevLogIndex <= rf.Log.LastLogIndex {
 
 		//这里是follower的日志多了一部分
-		if args.PrevLogIndex != -1 && rf.Log.Entries[args.PrevLogIndex].Term != args.PrevLogTerm {
+		if rf.getEntryTerm(args.PrevLogIndex) != args.PrevLogTerm {
 			reply.Success = false
 			reply.FollowerTerm = rf.currentTerm
 			reply.ConflictTerm = rf.Log.Entries[args.PrevLogIndex].Term //当前follower的最后一条日志条录的term，但是他与当前leader认为相同位置的日志条目term不同
@@ -48,11 +48,11 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	defer rf.mu.Unlock()
 	reply.Success = true
 	reply.FollowerTerm = rf.currentTerm
-	//可能日志后面有冲突的，先把后面的都清掉
-	rf.Log.Entries = rf.Log.Entries[:args.PrevLogIndex+1]
+	//可能日志后面有冲突的，先把后面的都清掉 保留了一致的部分[0,PrevLogIndex-1]
+	rf.Log.Entries = rf.Log.Entries[:args.PrevLogIndex]
 	//加入收到的leader发来的新日志
 	rf.Log.Entries = append(rf.Log.Entries, args.Logs...)
-	rf.Log.LastLogIndex = len(rf.Log.Entries) - 1
+	rf.Log.LastLogIndex = len(rf.Log.Entries)
 	DPrintf("Node %d appended new entries from leader %d; last log index now %d", rf.me, args.LeaderId, rf.Log.LastLogIndex)
 	if args.LeaderCommit > rf.commitIndex {
 		//说明该把 [rf.lastapplied,args.LeaderCommit]这部分的指令去应用到状态机中

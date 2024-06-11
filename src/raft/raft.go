@@ -382,8 +382,9 @@ func (rf *Raft) sendMsgToTester() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	for !rf.killed() {
-		DPrintf("%v: it is being blocked...", rf.me)
+		//DPrintf("%v: it is being blocked...", rf.me)
 		rf.applyCond.Wait()
+		DPrintf("%v: Woken up. Checking for new entries to apply...", rf.me)
 		//返回的时候已经拿到了互斥锁
 		//此时被唤醒的协程，说明有leader的commitIndex更新了。此时leader肯定会去将新提交的日志去应用到状态机中
 		for rf.lastApplied < rf.commitIndex {
@@ -395,14 +396,13 @@ func (rf *Raft) sendMsgToTester() {
 			//		rf.SayMeL(), i, rf.log.FirstLogIndex, rf.lastApplied)
 			//	panic("error happening")
 			//}
+
 			msg := ApplyMsg{
 				CommandValid: true,
 				Command:      rf.Log.Entries[i].Command,
 				CommandIndex: i,
 			}
-			DPrintf("%d: next apply index=%v lastApplied=%v len entries=%v "+
-				"LastLogIndex=%v cmd=%v\n", rf.me, i, rf.lastApplied, len(rf.Log.Entries),
-				rf.Log.LastLogIndex, rf.Log.Entries[i].Command)
+			DPrintf("%v: Applying log at index=%v, Command=%v", rf.me, i, msg.Command)
 			rf.ApplyHelper.tryApply(&msg)
 		}
 	}
@@ -454,8 +454,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.matchIndex = make([]int, len(rf.peers))
 	rf.resetElectionTimer() //初始化上次选举超时时间和上次接收到leader/candidate RPC的时间
 	rf.resetHeartBeatTimeOut()
-	rf.commitIndex = -1
-	rf.lastApplied = -1
+	rf.commitIndex = 0
+	rf.lastApplied = 0
 	rf.heartbeatTimeout = heartbeatTimeout
 	rf.Log = NewLog()
 	//rf.applyCh = applyCh

@@ -63,7 +63,7 @@ func (applyHelper *ApplyHelper) applier() {
 		DPrintf("applyhelper start apply msg index=%v", ifCond(msg.CommandValid, msg.CommandIndex, msg.SnapshotIndex))
 		applyHelper.applyCh <- msg
 		//<-applyHelper.applyCh
-		DPrintf("applyhelper done apply msg index=%v with log entry： %v", ifCond(msg.CommandValid, msg.CommandIndex, msg.SnapshotIndex), msg.Command)
+		DPrintf("applyhelper done apply msg index=%v with log entry command : %v", ifCond(msg.CommandValid, msg.CommandIndex, msg.SnapshotIndex), msg.Command)
 	}
 }
 
@@ -71,7 +71,7 @@ func (applyHelper *ApplyHelper) applier() {
 func (applyHelper *ApplyHelper) tryApply(msg *ApplyMsg) bool {
 	applyHelper.mu.Lock()
 	defer applyHelper.mu.Unlock()
-	DPrintf("applyhelper get msg index=%v", ifCond(msg.CommandValid, msg.CommandIndex, msg.SnapshotIndex))
+	//DPrintf("applyhelper get msg index=%v", ifCond(msg.CommandValid, msg.CommandIndex, msg.SnapshotIndex))
 	if msg.CommandValid {
 		if msg.CommandIndex <= applyHelper.lastItemIndex {
 			return true
@@ -80,6 +80,7 @@ func (applyHelper *ApplyHelper) tryApply(msg *ApplyMsg) bool {
 			applyHelper.q = append(applyHelper.q, *msg)
 			applyHelper.lastItemIndex++
 			applyHelper.cond.Broadcast()
+			DPrintf("applyhelper added command msg to queue and broadcasted with index=%v and command = %v", msg.CommandIndex, msg.Command)
 			return true
 		}
 		panic("applyhelper meet false")
