@@ -480,11 +480,9 @@ func (rf *Raft) sendLogAppendEntries(targetServerId int) {
 	}
 
 	prevLogIndex := min(rf.nextIndex[targetServerId]-1, rf.Log.LastLogIndex)
-	prevLogTerm := -1
-	if prevLogIndex >= 0 {
-		prevLogTerm = rf.Log.Entries[prevLogIndex].Term
-	}
-	entries := append([]Entry{}, rf.Log.Entries[prevLogIndex+1:]...)
+	prevLogTerm := rf.getEntryTerm(prevLogIndex)
+
+	entries := append([]Entry{}, rf.Log.Entries[rf.Log.getRealIndex(prevLogIndex+1):]...)
 	args := AppendEntriesArgs{
 		Term:         rf.currentTerm,
 		LeaderId:     rf.me,
