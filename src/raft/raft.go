@@ -399,7 +399,7 @@ func (rf *Raft) sendMsgToTester() {
 
 			msg := ApplyMsg{
 				CommandValid: true,
-				Command:      rf.Log.Entries[i].Command,
+				Command:      rf.Log.getOneEntry(i).Command,
 				CommandIndex: i,
 			}
 			DPrintf("%v: Applying log at index=%v, Command=%v", rf.me, i, msg.Command)
