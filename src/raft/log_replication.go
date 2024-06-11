@@ -56,23 +56,23 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	DPrintf("Node %d appended new entries from leader %d; last log index now %d", rf.me, args.LeaderId, rf.Log.LastLogIndex)
 	if args.LeaderCommit > rf.commitIndex {
 		//说明该把 [rf.lastapplied,args.LeaderCommit]这部分的指令去应用到状态机中
-		rf.commitIndex = args.LeaderCommit
-		rf.applyLogs()
+		rf.commitIndex = min(args.LeaderCommit, rf.Log.LastLogIndex)
+		rf.applyCond.Broadcast()
 	}
 }
 
-func (rf *Raft) applyLogs() {
-	for rf.lastApplied < rf.commitIndex {
-		rf.lastApplied++
-		applyMsg := ApplyMsg{
-			CommandValid: true,
-			Command:      rf.Log.Entries[rf.lastApplied].Command,
-			CommandIndex: rf.lastApplied,
-		}
-		rf.applyCh <- applyMsg
-	}
-}
-func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntriesArgs, reply *AppendEntriesReply, appendNums *int) {
+//	func (rf *Raft) applyLogs() {
+//		for rf.lastApplied < rf.commitIndex {
+//			rf.lastApplied++
+//			applyMsg := ApplyMsg{
+//				CommandValid: true,
+//				Command:      rf.Log.Entries[rf.lastApplied].Command,
+//				CommandIndex: rf.lastApplied,
+//			}
+//			rf.applyCh <- applyMsg
+//		}
+//	}
+func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	//rf.mu.Lock()
 	//defer rf.mu.Unlock()
 	// 死锁了这里
@@ -93,30 +93,32 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 		rf.nextIndex[targetServerId] = args.PrevLogIndex + 1 + len(args.Logs)
 		rf.matchIndex[targetServerId] = rf.nextIndex[targetServerId] - 1
 
-		if reply.FollowerTerm == rf.currentTerm && *appendNums <= len(rf.peers)/2 {
-			(*appendNums)++
-			DPrintf("Leader %d received successful AppendEntries reply from follower %d; incremented success count to %d", rf.me, targetServerId, *appendNums)
-		} else {
-			DPrintf("Leader %d received successful AppendEntries reply from follower %d but either term mismatch or majority already achieved", rf.me, targetServerId)
-		}
+		rf.tryCommit(rf.matchIndex[targetServerId])
+		//if reply.FollowerTerm == rf.currentTerm && *appendNums <= len(rf.peers)/2 {
+		//	(*appendNums)++
+		//	DPrintf("Leader %d received successful AppendEntries reply from follower %d; incremented success count to %d", rf.me, targetServerId, *appendNums)
+		//} else {
+		//	DPrintf("Leader %d received successful AppendEntries reply from follower %d but either term mismatch or majority already achieved", rf.me, targetServerId)
+		//}
+		//
+		//DPrintf("Leader %d updated nextIndex to %d and matchIndex to %d for follower %d after successful AppendEntries", rf.me, rf.nextIndex[targetServerId], rf.matchIndex[targetServerId], targetServerId)
+		//
+		//if *appendNums > len(rf.peers)/2 {
+		//	*appendNums = 0
+		//	for rf.lastApplied < len(rf.Log.Entries)-1 {
+		//		rf.lastApplied++
+		//		applyMsg := ApplyMsg{
+		//			CommandValid: true,
+		//			Command:      rf.Log.Entries[rf.lastApplied].Command,
+		//			CommandIndex: rf.lastApplied,
+		//		}
+		//		rf.applyCh <- applyMsg
+		//		rf.commitIndex = rf.lastApplied
+		//		//fmt.Printf("[	sendAppendEntries func-rf(%v)	] commitLog  \n", rf.me)
+		//	}
+		//	DPrintf("Leader %d has achieved majority of successful AppendEntries, applying logs to state machine", rf.me)
+		//}
 
-		DPrintf("Leader %d updated nextIndex to %d and matchIndex to %d for follower %d after successful AppendEntries", rf.me, rf.nextIndex[targetServerId], rf.matchIndex[targetServerId], targetServerId)
-
-		if *appendNums > len(rf.peers)/2 {
-			*appendNums = 0
-			for rf.lastApplied < len(rf.Log.Entries)-1 {
-				rf.lastApplied++
-				applyMsg := ApplyMsg{
-					CommandValid: true,
-					Command:      rf.Log.Entries[rf.lastApplied].Command,
-					CommandIndex: rf.lastApplied,
-				}
-				rf.applyCh <- applyMsg
-				rf.commitIndex = rf.lastApplied
-				//fmt.Printf("[	sendAppendEntries func-rf(%v)	] commitLog  \n", rf.me)
-			}
-			DPrintf("Leader %d has achieved majority of successful AppendEntries, applying logs to state machine", rf.me)
-		}
 	} else {
 		index := reply.ConflictIndex
 		term := reply.ConflictTerm
@@ -152,4 +154,41 @@ func (rf *Raft) findFirstIndexOfTerm(term int) int {
 		}
 	}
 	return -1
+}
+
+func (rf *Raft) tryCommit(matchIndex int) {
+	if matchIndex <= rf.commitIndex || matchIndex < rf.Log.FirstLogIndex || matchIndex > rf.Log.LastLogIndex {
+		return
+	}
+
+	if rf.Log.Entries[matchIndex].Term != rf.currentTerm {
+		// 提交的必须本任期内从客户端收到的日志
+		return
+	}
+	// 计算所有已经正确匹配该matchIndex的从节点的票数
+	cnt := 1 //自动计算上leader节点的一票
+	for i := 0; i < len(rf.peers); i++ {
+		if i == rf.me {
+			continue
+		}
+		// 为什么只需要保证提交的matchIndex必须小于等于其他节点的matchIndex就可以认为这个节点在这个matchIndex记录上正确匹配呢？
+		// 因为matchIndex是增量的，如果一个从节点的matchIndex=10，则表示该节点从1到9的子日志都和leader节点对上了
+		if matchIndex <= rf.matchIndex[i] {
+			cnt++
+		}
+	}
+
+	if cnt > len(rf.peers)/2 {
+		rf.commitIndex = matchIndex
+		if rf.commitIndex > rf.Log.LastLogIndex {
+			DPrintf("%v: commitIndex > lastlogindex %v > %v", rf.SayMeL(), rf.commitIndex, rf.Log.LastLogIndex)
+			panic("")
+		}
+		// DPrintf(500, "%v: commitIndex = %v ,entries=%v", rf.SayMeL(), rf.commitIndex, rf.log.Entries)
+		DPrintf("%v: 主结点已经提交了index为%d的日志，rf.lastApplied=%v rf.commitIndex=%v", rf.SayMeL(), rf.commitIndex, rf.lastApplied, rf.commitIndex)
+		rf.applyCond.Broadcast() // 通知每个节点的协程去检查当前commitIndex
+	} else {
+		DPrintf("\n%v: 未超过半数节点在此索引index : %d 上的日志相等，拒绝提交....\n", rf.SayMeL(), matchIndex)
+	}
+
 }

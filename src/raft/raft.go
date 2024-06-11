@@ -88,7 +88,9 @@ type Raft struct {
 	nextIndex  []int // 对于每一个server，需要发送给他下一个日志条目的索引值（初始化为leader日志index+1,那么范围就对标len） 记录每一个服务器日志更新的进度
 	matchIndex []int // 对于每一个server，已经复制给该server的最后日志条目下标
 
-	applyCh chan ApplyMsg
+	//applyCh   chan ApplyMsg
+	ApplyHelper *ApplyHelper
+	applyCond   *sync.Cond
 }
 
 type AppendEntriesArgs struct {
@@ -318,15 +320,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		rf.nextIndex[rf.me]++
 		rf.matchIndex[rf.me] = rf.nextIndex[rf.me] - 1
 		DPrintf("Leader %d added a new log entry at index %d with term %d, command: %v", rf.me, index, term, command)
-		appendNums := 1
-		for peer := range rf.peers {
-			if peer == rf.me {
-				continue
-			}
-
-			DPrintf("Leader %d ------->  follower %d", rf.me, peer)
-			go rf.sendLogAppendEntries(peer, &appendNums)
-		}
+		go rf.StartAppendEntries(false)
 
 	}
 	return index, term, isLeader
@@ -384,6 +378,36 @@ func (rf *Raft) ticker() {
 	}
 }
 
+func (rf *Raft) sendMsgToTester() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	for !rf.killed() {
+		DPrintf("%v: it is being blocked...", rf.me)
+		rf.applyCond.Wait()
+		//返回的时候已经拿到了互斥锁
+		//此时被唤醒的协程，说明有leader的commitIndex更新了。此时leader肯定会去将新提交的日志去应用到状态机中
+		for rf.lastApplied < rf.commitIndex {
+			i := rf.lastApplied + 1
+			rf.lastApplied++
+			//if i < rf.log.FirstLogIndex {
+			//	DPrintf(11111, "BUG：The rf.commitIndex is %d, term is %d, lastLogIndex is %d, and the log is %v", rf.commitIndex, rf.currentTerm, rf.log.LastLogIndex, rf.log.Entries)
+			//	DPrintf(11111, "%v: apply index=%v but rf.log.FirstLogIndex=%v rf.lastApplied=%v\n",
+			//		rf.SayMeL(), i, rf.log.FirstLogIndex, rf.lastApplied)
+			//	panic("error happening")
+			//}
+			msg := ApplyMsg{
+				CommandValid: true,
+				Command:      rf.Log.Entries[i].Command,
+				CommandIndex: i,
+			}
+			DPrintf("%d: next apply index=%v lastApplied=%v len entries=%v "+
+				"LastLogIndex=%v cmd=%v\n", rf.me, i, rf.lastApplied, len(rf.Log.Entries),
+				rf.Log.LastLogIndex, rf.Log.Entries[i].Command)
+			rf.ApplyHelper.tryApply(&msg)
+		}
+	}
+}
+
 // 广播心跳
 func (rf *Raft) StartAppendEntries(heart bool) {
 	rf.mu.Lock()
@@ -392,12 +416,14 @@ func (rf *Raft) StartAppendEntries(heart bool) {
 	if rf.state != Leader {
 		return
 	}
+
 	for i, _ := range rf.peers {
 		if i == rf.me {
 			continue
 		}
-		go rf.AppendEntries(i, true, []Entry{})
+		go rf.AppendEntries(i, heart)
 	}
+
 }
 
 //
@@ -432,17 +458,20 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.lastApplied = -1
 	rf.heartbeatTimeout = heartbeatTimeout
 	rf.Log = NewLog()
-	rf.applyCh = applyCh
+	//rf.applyCh = applyCh
+	rf.ApplyHelper = NewApplyHelper(applyCh, rf.lastApplied)
+	rf.applyCond = sync.NewCond(&rf.mu)
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
 	// start ticker goroutine to start elections
 	go rf.ticker()
 
+	go rf.sendMsgToTester()
 	return rf
 }
 
-func (rf *Raft) sendLogAppendEntries(targetServerId int, appendNums *int) {
+func (rf *Raft) sendLogAppendEntries(targetServerId int) {
 	//发送最新的log
 	rf.mu.Lock()
 	if rf.state != Leader {
@@ -450,12 +479,12 @@ func (rf *Raft) sendLogAppendEntries(targetServerId int, appendNums *int) {
 		return
 	}
 
-	prevLogIndex := rf.nextIndex[targetServerId] - 1
+	prevLogIndex := min(rf.nextIndex[targetServerId]-1, rf.Log.LastLogIndex)
 	prevLogTerm := -1
 	if prevLogIndex >= 0 {
 		prevLogTerm = rf.Log.Entries[prevLogIndex].Term
 	}
-	entries := append([]Entry{}, rf.Log.Entries[rf.nextIndex[targetServerId]:]...)
+	entries := append([]Entry{}, rf.Log.Entries[prevLogIndex+1:]...)
 	args := AppendEntriesArgs{
 		Term:         rf.currentTerm,
 		LeaderId:     rf.me,
@@ -471,14 +500,14 @@ func (rf *Raft) sendLogAppendEntries(targetServerId int, appendNums *int) {
 		rf.mu.Lock() // Re-acquire lock to handle the reply
 		DPrintf("Leader %d received a reply from %d for AppendEntries: Success=%v", rf.me, targetServerId, reply.Success)
 		if rf.state == Leader { // Double-check the state
-			rf.handleAppendEntriesReply(targetServerId, &args, &reply, appendNums)
+			rf.handleAppendEntriesReply(targetServerId, &args, &reply)
 		}
 		rf.mu.Unlock()
 	}
 
 }
 
-func (rf *Raft) AppendEntries(targetServerId int, heart bool, entries []Entry) {
+func (rf *Raft) AppendEntries(targetServerId int, heart bool) {
 
 	if heart {
 		rf.mu.Lock()
@@ -488,8 +517,9 @@ func (rf *Raft) AppendEntries(targetServerId int, heart bool, entries []Entry) {
 			return
 		}
 		args := AppendEntriesArgs{
-			Term:     rf.currentTerm,
-			LeaderId: rf.me,
+			Term:         rf.currentTerm,
+			LeaderId:     rf.me,
+			LeaderCommit: rf.commitIndex,
 		}
 		rf.mu.Unlock()
 
@@ -520,39 +550,8 @@ func (rf *Raft) AppendEntries(targetServerId int, heart bool, entries []Entry) {
 		}
 		rf.mu.Unlock()
 	} else {
-		////发送最新的log
-		//rf.mu.Lock()
-		//if rf.state != Leader {
-		//	rf.mu.Unlock()
-		//	return
-		//}
-		//
-		//prevLogIndex := rf.nextIndex[targetServerId] - 1
-		//prevLogTerm := -1
-		//if prevLogIndex >= 0 {
-		//	prevLogTerm = rf.Log.Entries[prevLogIndex].Term
-		//}
-		//entries := append([]Entry{}, rf.Log.Entries[rf.nextIndex[targetServerId]:]...)
-		//args := AppendEntriesArgs{
-		//	Term:         rf.currentTerm,
-		//	LeaderId:     rf.me,
-		//	PrevLogIndex: prevLogIndex,
-		//	PrevLogTerm:  prevLogTerm,
-		//	LeaderCommit: rf.commitIndex,
-		//	Logs:         entries,
-		//}
-		//rf.mu.Unlock() // Release lock before I/O operation
-		//
-		//var reply AppendEntriesReply
-		//if rf.sendRequestAppendEntries(false, targetServerId, &args, &reply) {
-		//	rf.mu.Lock() // Re-acquire lock to handle the reply
-		//	DPrintf("Leader %d received a reply from %d for AppendEntries: Success=%v", rf.me, targetServerId, reply.Success)
-		//	if rf.state == Leader { // Double-check the state
-		//		rf.handleAppendEntriesReply(targetServerId, &args, &reply,appendNums)
-		//	}
-		//	rf.mu.Unlock()
-		//}
-
+		//appendNums := 0
+		rf.sendLogAppendEntries(targetServerId)
 	}
 }
 func (rf *Raft) sendRequestAppendEntries(isHeartbeat bool, server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {

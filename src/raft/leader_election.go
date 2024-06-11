@@ -134,6 +134,9 @@ func (rf *Raft) HandleHeartbeatRPC(args *AppendEntriesArgs, reply *AppendEntries
 		reply.FollowerTerm = rf.currentTerm
 		//rf.persist()
 	}
+
+	//lab2B所做修改，对于commitIndex日志的提交
+
 	rf.persist()
 
 	// 重置自身的选举定时器，这样自己就不会重新发出选举需求（因为它在ticker函数中被阻塞住了）
