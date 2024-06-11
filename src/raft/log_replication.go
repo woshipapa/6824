@@ -35,7 +35,7 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 		if rf.getEntryTerm(args.PrevLogIndex) != args.PrevLogTerm {
 			reply.Success = false
 			reply.FollowerTerm = rf.currentTerm
-			reply.ConflictTerm = rf.Log.Entries[args.PrevLogIndex].Term //当前follower的最后一条日志条录的term，但是他与当前leader认为相同位置的日志条目term不同
+			reply.ConflictTerm = rf.getEntryTerm(args.PrevLogIndex) //当前follower的最后一条日志条录的term，但是他与当前leader认为相同位置的日志条目term不同
 			//reply.ConflictIndex = rf.findFirstIndexOfTerm(reply.ConflictTerm) //找到这个不符合的term的第一个，可以减少很多的AppendEntries
 			reply.ConflictIndex = args.PrevLogIndex - 1
 			DPrintf("Node %d log inconsistency at index %d; found term %d, expected %d", rf.me, args.PrevLogIndex, reply.ConflictTerm, args.PrevLogTerm)
