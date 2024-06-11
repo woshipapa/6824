@@ -161,7 +161,7 @@ func (rf *Raft) tryCommit(matchIndex int) {
 		return
 	}
 
-	if rf.Log.Entries[matchIndex].Term != rf.currentTerm {
+	if rf.getEntryTerm(matchIndex) != rf.currentTerm {
 		// 提交的必须本任期内从客户端收到的日志
 		return
 	}
