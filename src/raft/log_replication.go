@@ -49,13 +49,19 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 
 	reply.Success = true
 	reply.FollowerTerm = rf.currentTerm
-	//可能日志后面有冲突的，先把后面的都清掉 保留了一致的部分[0,PrevLogIndex-1]
+	//XXX可能日志后面有冲突的，先把后面的都清掉 保留了一致的部分[0,PrevLogIndex-1]
+	//!!这里索引不对，没有修改
 	rf.Log.Entries = rf.Log.Entries[:args.PrevLogIndex]
 	//加入收到的leader发来的新日志
 	if len(args.Logs) != 0 {
 		//避免重复，因为和之前是相同的
 		rf.Log.Entries = append(rf.Log.Entries, args.Logs...)
 		rf.Log.LastLogIndex = len(rf.Log.Entries)
+		// 打印输出新增的日志的具体内容
+		for _, logEntry := range rf.Log.Entries {
+			DPrintf("Node %d now entry command is : %v", rf.me, logEntry.Command)
+		}
+
 		DPrintf("Node %d appended new entries from leader %d; last log index now %d", rf.me, args.LeaderId, rf.Log.LastLogIndex)
 	}
 	if args.LeaderCommit > rf.commitIndex {
