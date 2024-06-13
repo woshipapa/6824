@@ -5,6 +5,8 @@ package raft
 接收方收到日志更新的RPC
 */
 func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	if args.Term < rf.currentTerm {
 		//过时的leader发来请求
 		reply.Success = false
@@ -44,8 +46,7 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	}
 
 	// [PrevLogIndex+1,...]接受最新的log
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+
 	reply.Success = true
 	reply.FollowerTerm = rf.currentTerm
 	//可能日志后面有冲突的，先把后面的都清掉 保留了一致的部分[0,PrevLogIndex-1]
@@ -60,7 +61,9 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	if args.LeaderCommit > rf.commitIndex {
 		//说明该把 [rf.lastapplied,args.LeaderCommit]这部分的指令去应用到状态机中
 		rf.commitIndex = min(args.LeaderCommit, rf.Log.LastLogIndex)
-		rf.applyCond.Broadcast()
+		if rf.commitIndex > rf.lastApplied {
+			rf.applyCond.Broadcast() //唤醒每个follower等待应用日志到状态机的协程 sendMsgToTester
+		}
 	}
 }
 
