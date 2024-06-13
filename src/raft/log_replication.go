@@ -73,8 +73,9 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 			DPrintf("Node %d appended new entry at index %d: %v", rf.me, index, entry.Command)
 		} else if rf.Log.getOneEntry(index).Term != entry.Term {
 			ok = false
-			DPrintf("Node %d found term mismatch at index %d: expected %d, got %d", rf.me, index, rf.Log.getOneEntry(index).Term, entry.Term)
-			rf.Log.Entries[index] = entry // 覆盖
+			DPrintf("Node %d found term mismatch at index %d: 本来Log的term : %d, entry :  %d", rf.me, index, rf.Log.getOneEntry(index).Term, entry.Term)
+			//rf.Log.Entries[index-1] = entry // 覆盖
+			*rf.Log.getOneEntry(index) = entry
 			DPrintf("Node %d overwritten entry at index %d with: %v", rf.me, index, entry.Command)
 		}
 	}
