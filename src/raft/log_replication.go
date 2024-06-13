@@ -51,19 +51,35 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	reply.FollowerTerm = rf.currentTerm
 	//XXX可能日志后面有冲突的，先把后面的都清掉 保留了一致的部分[0,PrevLogIndex-1]
 	//!!这里索引不对，没有修改
-	rf.Log.Entries = rf.Log.Entries[:args.PrevLogIndex]
+	//rf.Log.Entries = rf.Log.Entries[:args.PrevLogIndex]
 	//加入收到的leader发来的新日志
-	if len(args.Logs) != 0 {
-		//避免重复，因为和之前是相同的
-		rf.Log.Entries = append(rf.Log.Entries, args.Logs...)
-		rf.Log.LastLogIndex = len(rf.Log.Entries)
-		// 打印输出新增的日志的具体内容
-		for i := 0; i < len(rf.Log.Entries); i++ {
-			logEntry := rf.Log.Entries[i]
-			DPrintf("Node %d now entry command is : %v", rf.me, logEntry.Command)
+	//if len(args.Logs) != 0 {
+	//	//避免重复，因为和之前是相同的
+	//	rf.Log.Entries = append(rf.Log.Entries, args.Logs...)
+	//	rf.Log.LastLogIndex = len(rf.Log.Entries)
+	//	// 打印输出新增的日志的具体内容
+	//	for i := 0; i < len(rf.Log.Entries); i++ {
+	//		logEntry := rf.Log.Entries[i]
+	//		DPrintf("Node %d now entry command is : %v", rf.me, logEntry.Command)
+	//	}
+	//
+	//	DPrintf("Node %d appended new entries from leader %d; last log index now %d", rf.me, args.LeaderId, rf.Log.LastLogIndex)
+	//}
+	ok := true
+	for i, entry := range args.Logs {
+		index := args.PrevLogIndex + i + 1
+		if index > rf.Log.LastLogIndex {
+			rf.Log.appendL(entry)
+			DPrintf("Node %d appended new entry at index %d: %v", rf.me, index, entry.Command)
+		} else if rf.Log.getOneEntry(index).Term != entry.Term {
+			ok = false
+			DPrintf("Node %d found term mismatch at index %d: expected %d, got %d", rf.me, index, rf.Log.getOneEntry(index).Term, entry.Term)
+			rf.Log.Entries[index] = entry // 覆盖
+			DPrintf("Node %d overwritten entry at index %d with: %v", rf.me, index, entry.Command)
 		}
-
-		DPrintf("Node %d appended new entries from leader %d; last log index now %d", rf.me, args.LeaderId, rf.Log.LastLogIndex)
+	}
+	if !ok {
+		rf.Log.LastLogIndex = args.PrevLogIndex + len(args.Logs)
 	}
 	if args.LeaderCommit > rf.commitIndex {
 		//说明该把 [rf.lastapplied,args.LeaderCommit]这部分的指令去应用到状态机中
