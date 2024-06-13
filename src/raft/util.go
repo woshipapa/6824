@@ -53,14 +53,14 @@ func NewApplyHelper(applyCh chan ApplyMsg, lastApplied int) *ApplyHelper {
 func (applyHelper *ApplyHelper) applier() {
 	for !applyHelper.killed() {
 		applyHelper.mu.Lock()
-		defer applyHelper.mu.Unlock()
+		//defer applyHelper.mu.Unlock()
 		//消费者模型，把缓冲队列中的msg取出应用到applyCh中去
 		if len(applyHelper.q) == 0 {
 			applyHelper.cond.Wait()
 		}
 		msg := applyHelper.q[0]
 		applyHelper.q = applyHelper.q[1:]
-
+		applyHelper.mu.Unlock()
 		DPrintf("applyhelper start apply msg index=%v", ifCond(msg.CommandValid, msg.CommandIndex, msg.SnapshotIndex))
 		applyHelper.applyCh <- msg
 		//<-applyHelper.applyCh

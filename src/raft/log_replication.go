@@ -58,9 +58,9 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 		rf.Log.Entries = append(rf.Log.Entries, args.Logs...)
 		rf.Log.LastLogIndex = len(rf.Log.Entries)
 		// 打印输出新增的日志的具体内容
-		for _, logEntry := range rf.Log.Entries {
-			DPrintf("Node %d now entry command is : %v", rf.me, logEntry.Command)
-		}
+		//for _, logEntry := range rf.Log.Entries {
+		//	DPrintf("Node %d now entry command is : %v", rf.me, logEntry.Command)
+		//}
 
 		DPrintf("Node %d appended new entries from leader %d; last log index now %d", rf.me, args.LeaderId, rf.Log.LastLogIndex)
 	}
