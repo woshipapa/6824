@@ -252,7 +252,7 @@ func (rf *Raft) isLogUpToDate(candidateLastIdx, candidateLastTerm int) bool {
 	lastIndex := rf.Log.LastLogIndex
 	lastTerm := rf.getLastEntryTerm()
 	//候选者的最后的日志任期不能落后于投票者，并且他的日志长度也不能比投票者的短
-	return candidateLastTerm >= lastTerm && candidateLastIdx >= lastIndex
+	return candidateLastTerm > lastTerm || (candidateLastTerm == lastTerm && candidateLastIdx >= lastIndex)
 }
 
 // example code to send a RequestVote RPC to a server.
