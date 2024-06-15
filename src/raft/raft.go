@@ -339,6 +339,12 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	DPrintf("%v : is killed", rf.SayMeL())
+	rf.ApplyHelper.Kill()
+	rf.state = Follower
+	//rf.SetServerStateL(followerState)
 }
 
 // killed来检查当前实例是否已经dead了，也就是使用过Kill

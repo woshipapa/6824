@@ -330,7 +330,7 @@ func TestFailNoAgree2B(t *testing.T) {
 	}
 
 	time.Sleep(2 * RaftElectionTimeout)
-
+	//因为半数以上节点都断连了，所以index=2这个日志一直不能提交
 	n, _ := cfg.nCommitted(index)
 	if n > 0 {
 		t.Fatalf("%v committed but no majority", n)
