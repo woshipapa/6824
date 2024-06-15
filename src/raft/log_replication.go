@@ -196,10 +196,10 @@ func (rf *Raft) tryCommit(matchIndex int) {
 		return
 	}
 
-	if rf.getEntryTerm(matchIndex) != rf.currentTerm {
-		// 提交的必须本任期内从客户端收到的日志
-		return
-	}
+	//if rf.getEntryTerm(matchIndex) != rf.currentTerm {
+	//	// 提交的必须本任期内从客户端收到的日志
+	//	return
+	//}
 	// 计算所有已经正确匹配该matchIndex的从节点的票数
 	cnt := 1 //自动计算上leader节点的一票
 	for i := 0; i < len(rf.peers); i++ {
@@ -207,7 +207,7 @@ func (rf *Raft) tryCommit(matchIndex int) {
 			continue
 		}
 		// 为什么只需要保证提交的matchIndex必须小于等于其他节点的matchIndex就可以认为这个节点在这个matchIndex记录上正确匹配呢？
-		// 因为matchIndex是增量的，如果一个从节点的matchIndex=10，则表示该节点从1到9的子日志都和leader节点对上了
+		// 因为matchIndex是增量的，如果一个从节点的matchIndex=10，则表示该节点从1到10的子日志都和leader节点对上了
 		if matchIndex <= rf.matchIndex[i] {
 			cnt++
 		}
