@@ -248,7 +248,7 @@ func (rf *Raft) SayMeL() string {
 }
 
 // Helper function to check if the candidate's log is at least as up-to-date as receiver's log
-func (rf *Raft) isLogUpToDate(candidateLastIdx, candidateLastTerm int) bool {
+func (rf *Raft) isLogUpToDate(candidateLastIdx int, candidateLastTerm int) bool {
 	lastIndex := rf.Log.LastLogIndex
 	lastTerm := rf.getLastEntryTerm()
 	//候选者的最后的日志任期不能落后于投票者，并且他的日志长度也不能比投票者的短
@@ -379,6 +379,7 @@ func (rf *Raft) ticker() {
 	}
 }
 
+// 这个被唤醒是因为某个follower他的lastApplied < leader的commitIndex了
 func (rf *Raft) sendMsgToTester() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()

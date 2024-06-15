@@ -1,5 +1,7 @@
 package raft
 
+import "fmt"
+
 /*
 *
 接收方收到日志更新的RPC
@@ -82,6 +84,7 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	if !ok {
 		rf.Log.LastLogIndex = args.PrevLogIndex + len(args.Logs)
 	}
+	//follower去将日志更新到状态机中去
 	if args.LeaderCommit > rf.commitIndex {
 		//说明该把 [rf.lastapplied,args.LeaderCommit]这部分的指令去应用到状态机中
 		rf.commitIndex = min(args.LeaderCommit, rf.Log.LastLogIndex)
@@ -122,6 +125,8 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 	if reply.Success {
 		rf.nextIndex[targetServerId] = args.PrevLogIndex + 1 + len(args.Logs)
 		rf.matchIndex[targetServerId] = rf.nextIndex[targetServerId] - 1
+		fmt.Printf("AppendEntries to %d succeeded: nextIndex[%d] = %d, matchIndex[%d] = %d\n",
+			targetServerId, targetServerId, rf.nextIndex[targetServerId], targetServerId, rf.matchIndex[targetServerId])
 
 		rf.tryCommit(rf.matchIndex[targetServerId])
 		//if reply.FollowerTerm == rf.currentTerm && *appendNums <= len(rf.peers)/2 {
