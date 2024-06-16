@@ -45,6 +45,7 @@ func (rf *Raft) getEntryTerm(index int) int {
 	return -1
 }
 func (log *Log) appendL(newEntries ...Entry) {
+	//这里会截断后面不匹配的
 	log.Entries = append(log.Entries[:log.getRealIndex(log.LastLogIndex)+1], newEntries...)
 	log.LastLogIndex += len(newEntries)
 
