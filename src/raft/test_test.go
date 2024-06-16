@@ -495,6 +495,7 @@ func TestRejoin2B(t *testing.T) {
 
 	cfg.end()
 }
+
 func TestBackup2B(t *testing.T) {
 	servers := 5
 	cfg := make_config(t, servers, false, false)
@@ -504,172 +505,71 @@ func TestBackup2B(t *testing.T) {
 
 	cfg.one(rand.Int(), servers, true)
 
-	fmt.Println("Press enter to continue...")
-	fmt.Scanln()
-
+	// put leader and one follower in a partition
 	leader1 := cfg.checkOneLeader()
-	fmt.Printf("Initial leader is Server %d\n", leader1)
 	cfg.disconnect((leader1 + 2) % servers)
 	cfg.disconnect((leader1 + 3) % servers)
 	cfg.disconnect((leader1 + 4) % servers)
 
-	fmt.Println("Press enter to continue...")
-	fmt.Scanln()
-
+	// submit lots of commands that won't commit
+	//因为不能获得半数以上的投票，所以未能提交
 	for i := 0; i < 50; i++ {
 		cfg.rafts[leader1].Start(rand.Int())
 	}
-	fmt.Printf("50 commands submitted that will not commit.\n")
-
-	fmt.Println("Press enter to continue...")
-	fmt.Scanln()
 
 	time.Sleep(RaftElectionTimeout / 2)
 
+	//把刚刚那俩个已经复制过了这50个日志的节点短连
 	cfg.disconnect((leader1 + 0) % servers)
 	cfg.disconnect((leader1 + 1) % servers)
 
-	fmt.Println("Press enter to continue...")
-	fmt.Scanln()
-
+	// allow other partition to recover
 	cfg.connect((leader1 + 2) % servers)
 	cfg.connect((leader1 + 3) % servers)
 	cfg.connect((leader1 + 4) % servers)
 
-	fmt.Println("Press enter to continue...")
-	fmt.Scanln()
-
+	// lots of successful commands to new group.
+	//这50条指令将成功被复制到这三个节点并且会被应用到状态机上
 	for i := 0; i < 50; i++ {
 		cfg.one(rand.Int(), 3, true)
 	}
-	fmt.Printf("50 successful commands committed to the new group.\n")
 
-	fmt.Println("Press enter to continue...")
-	fmt.Scanln()
-
+	// now another partitioned leader and one follower
 	leader2 := cfg.checkOneLeader()
 	other := (leader1 + 2) % servers
 	if leader2 == other {
 		other = (leader2 + 1) % servers
 	}
 	cfg.disconnect(other)
-
-	fmt.Printf("New leader is Server %d, with isolated follower Server %d\n", leader2, other)
-	fmt.Println("Press enter to continue...")
-	fmt.Scanln()
-
+	//现在这50条日志也不会被提交，因为又只剩下俩个节点了，无法获得半数以上的日志复制通过
+	// lots more commands that won't commit
 	for i := 0; i < 50; i++ {
 		cfg.rafts[leader2].Start(rand.Int())
 	}
 
-	fmt.Println("Press enter to continue...")
-	fmt.Scanln()
-
 	time.Sleep(RaftElectionTimeout / 2)
 
+	// bring original leader back to life,
 	for i := 0; i < servers; i++ {
 		cfg.disconnect(i)
 	}
 	cfg.connect((leader1 + 0) % servers)
 	cfg.connect((leader1 + 1) % servers)
 	cfg.connect(other)
-
-	fmt.Println("Press enter to continue...")
-	fmt.Scanln()
-
+	//到这里进行投票选举，一定是other成为leader，因为他的日志最新，leader1和leader+1会进行日志的追加
+	// lots of successful commands to new group.
 	for i := 0; i < 50; i++ {
 		cfg.one(rand.Int(), 3, true)
 	}
 
-	fmt.Println("Press enter to continue...")
-	fmt.Scanln()
-
+	// now everyone
 	for i := 0; i < servers; i++ {
 		cfg.connect(i)
 	}
 	cfg.one(rand.Int(), servers, true)
 
-	fmt.Println("Press enter to continue...")
-	fmt.Scanln()
-
 	cfg.end()
-	fmt.Println("Test completed.")
 }
-
-//func TestBackup2B(t *testing.T) {
-//	servers := 5
-//	cfg := make_config(t, servers, false, false)
-//	defer cfg.cleanup()
-//
-//	cfg.begin("Test (2B): leader backs up quickly over incorrect follower logs")
-//
-//	cfg.one(rand.Int(), servers, true)
-//
-//	// put leader and one follower in a partition
-//	leader1 := cfg.checkOneLeader()
-//	cfg.disconnect((leader1 + 2) % servers)
-//	cfg.disconnect((leader1 + 3) % servers)
-//	cfg.disconnect((leader1 + 4) % servers)
-//
-//	// submit lots of commands that won't commit
-//	//因为不能获得半数以上的投票，所以未能提交
-//	for i := 0; i < 50; i++ {
-//		cfg.rafts[leader1].Start(rand.Int())
-//	}
-//
-//	time.Sleep(RaftElectionTimeout / 2)
-//
-//	//把刚刚那俩个已经复制过了这50个日志的节点短连
-//	cfg.disconnect((leader1 + 0) % servers)
-//	cfg.disconnect((leader1 + 1) % servers)
-//
-//	// allow other partition to recover
-//	cfg.connect((leader1 + 2) % servers)
-//	cfg.connect((leader1 + 3) % servers)
-//	cfg.connect((leader1 + 4) % servers)
-//
-//	// lots of successful commands to new group.
-//	//这50条指令将成功被复制到这三个节点并且会被应用到状态机上
-//	for i := 0; i < 50; i++ {
-//		cfg.one(rand.Int(), 3, true)
-//	}
-//
-//	// now another partitioned leader and one follower
-//	leader2 := cfg.checkOneLeader()
-//	other := (leader1 + 2) % servers
-//	if leader2 == other {
-//		other = (leader2 + 1) % servers
-//	}
-//	cfg.disconnect(other)
-//	//现在这50条日志也不会被提交，因为又只剩下俩个节点了，无法获得半数以上的日志复制通过
-//	// lots more commands that won't commit
-//	for i := 0; i < 50; i++ {
-//		cfg.rafts[leader2].Start(rand.Int())
-//	}
-//
-//	time.Sleep(RaftElectionTimeout / 2)
-//
-//	// bring original leader back to life,
-//	for i := 0; i < servers; i++ {
-//		cfg.disconnect(i)
-//	}
-//	cfg.connect((leader1 + 0) % servers)
-//	cfg.connect((leader1 + 1) % servers)
-//	cfg.connect(other)
-//	//到这里进行投票选举，一定是other成为leader，因为他的日志最新，leader1和leader+1会进行日志的追加
-//	// lots of successful commands to new group.
-//	for i := 0; i < 50; i++ {
-//		cfg.one(rand.Int(), 3, true)
-//	}
-//
-//	// now everyone
-//	for i := 0; i < servers; i++ {
-//		cfg.connect(i)
-//	}
-//	cfg.one(rand.Int(), servers, true)
-//
-//	cfg.end()
-//}
 
 func TestCount2B(t *testing.T) {
 	servers := 3
