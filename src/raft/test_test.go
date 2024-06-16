@@ -532,6 +532,7 @@ func TestBackup2B(t *testing.T) {
 	//这50条指令将成功被复制到这三个节点并且会被应用到状态机上
 	for i := 0; i < 50; i++ {
 		cfg.one(rand.Int(), 3, true)
+		//注意one会等待这一个日志被提交了再去执行下一轮循环
 	}
 
 	// now another partitioned leader and one follower
