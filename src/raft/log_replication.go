@@ -80,10 +80,10 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 			*rf.Log.getOneEntry(index) = entry
 			DPrintf("Node %d overwritten entry at index %d with: %v", rf.me, index, entry.Command)
 			// 打印整个日志列表
-			DPrintf("Node %d 现在的日志列表:", rf.me)
-			for i, logEntry := range rf.Log.Entries {
-				DPrintf("Index: %d, Term: %d, Command: %v", i+1, logEntry.Term, logEntry.Command)
-			}
+			//DPrintf("Node %d 现在的日志列表:", rf.me)
+			//for i, logEntry := range rf.Log.Entries {
+			//	DPrintf("Index: %d, Term: %d, Command: %v", i+1, logEntry.Term, logEntry.Command)
+			//}
 		}
 	}
 	if !ok {
