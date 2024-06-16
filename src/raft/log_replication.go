@@ -189,7 +189,7 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 
 func (rf *Raft) findFirstIndexOfTerm(preLogIndex int, term int) int {
 	for i := preLogIndex; i >= 0; i-- {
-		if rf.Log.Entries[i].Term != term {
+		if rf.Log.getOneEntry(i).Term != term {
 			return i + 1
 		}
 	}
