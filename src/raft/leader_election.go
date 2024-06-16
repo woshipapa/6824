@@ -87,6 +87,7 @@ func (rf *Raft) becomeLeader() {
 
 	// 初始化nextIndex
 	//rf.nextIndex = make([]int, len(rf.peers))
+	//初始化的话，就是还没有日志条目，next都是1，都要从第一个位置开始
 	for i := range rf.nextIndex {
 		rf.nextIndex[i] = lastIndex + 1 // 下一个要发送的日志条目是最后一个索引加一
 	}

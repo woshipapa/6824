@@ -39,9 +39,9 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 		if rf.getEntryTerm(args.PrevLogIndex) != args.PrevLogTerm {
 			reply.Success = false
 			reply.FollowerTerm = rf.currentTerm
-			reply.ConflictTerm = rf.getEntryTerm(args.PrevLogIndex) //当前follower的最后一条日志条录的term，但是他与当前leader认为相同位置的日志条目term不同
-			//reply.ConflictIndex = rf.findFirstIndexOfTerm(reply.ConflictTerm) //找到这个不符合的term的第一个，可以减少很多的AppendEntries
-			reply.ConflictIndex = args.PrevLogIndex - 1
+			reply.ConflictTerm = rf.getEntryTerm(args.PrevLogIndex)                              //当前follower的最后一条日志条录的term，但是他与当前leader认为相同位置的日志条目term不同
+			reply.ConflictIndex = rf.findFirstIndexOfTerm(args.PrevLogIndex, reply.ConflictTerm) //找到这个不符合的term的第一个，可以减少很多的AppendEntries
+			//reply.ConflictIndex = args.PrevLogIndex - 1
 			DPrintf("Node %d log inconsistency at index %d; found term %d, expected %d", rf.me, args.PrevLogIndex, reply.ConflictTerm, args.PrevLogTerm)
 			return
 		}
@@ -165,10 +165,10 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 		if term == -1 {
 			DPrintf("Follower %d log shorter than expected, adjusting nextIndex to %d", targetServerId, max(1, index))
 			//说明follower的日志条目比较短还没有到预期的index，所以下调到follower对应的位置
-			rf.nextIndex[targetServerId] = max(1, index)
+			rf.nextIndex[targetServerId] = max(1, index) //这里返回的index就是当前follower日志最后的下一个待插入位置
 		} else {
 			DPrintf("Log inconsistency found at term %d, decrementing nextIndex for follower %d", term, targetServerId)
-			rf.nextIndex[targetServerId]--
+			rf.nextIndex[targetServerId] = index
 			//found := false
 			//for i := args.PrevLogIndex; i >= rf.Log.FirstLogIndex; i-- {
 			//	if rf.Log.Entries[i].Term == term {
@@ -187,13 +187,13 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 
 }
 
-func (rf *Raft) findFirstIndexOfTerm(term int) int {
-	for i := len(rf.Log.Entries) - 1; i >= 0; i-- {
+func (rf *Raft) findFirstIndexOfTerm(preLogIndex int, term int) int {
+	for i := preLogIndex; i >= 0; i-- {
 		if rf.Log.Entries[i].Term != term {
 			return i + 1
 		}
 	}
-	return -1
+	return 1
 }
 
 func (rf *Raft) tryCommit(matchIndex int) {
