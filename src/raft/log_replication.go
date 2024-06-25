@@ -155,19 +155,20 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 			rf.nextIndex[targetServerId] = max(1, index) //这里返回的index就是当前follower日志最后的下一个待插入位置
 		} else {
 			DPrintf("Log inconsistency found at term %d, decrementing nextIndex for follower %d", term, targetServerId)
-			rf.nextIndex[targetServerId] = index
-			//found := false
-			//for i := args.PrevLogIndex; i >= rf.Log.FirstLogIndex; i-- {
-			//	if rf.Log.Entries[i].Term == term {
-			//		//如果冲突任期存在，查找该任期在日志中的最后一个索引，并更新nextIndex。
-			//		found = true
-			//		rf.nextIndex[targetServerId] = i + 1 //下次发送的prevLogIndex和这个follower最后一条日志的term就相同了
-			//		break
-			//	}
-			//}
-			//if !found {
-			//	rf.nextIndex[targetServerId] = index
-			//}
+			//rf.nextIndex[targetServerId] = index
+			conflictIndex := -1
+			//leader先找，看能不能找到与冲突任期相同的日志，有的话就是返回这个任期的最后一个再去和follower比对
+			for i := args.PrevLogIndex; i > 0; i-- {
+				if rf.getEntryTerm(i) == reply.ConflictTerm {
+					conflictIndex = i
+					break
+				}
+			}
+			if conflictIndex != -1 {
+				rf.nextIndex[targetServerId] = conflictIndex + 1
+			} else {
+				rf.nextIndex[targetServerId] = reply.ConflictIndex
+			}
 		}
 
 	}
