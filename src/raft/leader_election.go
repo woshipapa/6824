@@ -40,7 +40,7 @@ func (rf *Raft) StartElection() {
 	args.LastLogTerm = rf.getLastEntryTerm()
 	args.LastLogIndex = rf.Log.LastLogIndex
 	votes := 1
-
+	defer rf.persist()
 	for i, _ := range rf.peers {
 		if rf.me == i {
 			continue
@@ -83,7 +83,7 @@ func (rf *Raft) StartElection() {
 func (rf *Raft) becomeLeader() {
 	rf.state = Leader
 	DPrintf("%v: [%d] got enough votes, and now is the leader(currentTerm=%d, state=%v)!starting to append heartbeat...\n", rf.SayMeL(), rf.me, rf.currentTerm, rf.state)
-	lastIndex := rf.Log.LastLogIndex // 日志索引从0开始，因此最后一个索引是长度减一
+	lastIndex := rf.Log.LastLogIndex
 
 	// 初始化nextIndex
 	//rf.nextIndex = make([]int, len(rf.peers))

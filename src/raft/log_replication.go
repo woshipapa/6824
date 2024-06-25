@@ -25,6 +25,9 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	// 重置选举计时器，因为收到了有效的AppendEntries RPC
 	DPrintf("follower %d 收到了 leader的日志复制请求，进行选举时间的刷新", rf.me)
 	rf.resetElectionTimer()
+
+	defer rf.persist()
+
 	if args.PrevLogIndex > rf.Log.LastLogIndex {
 		//follower的日志短于leader的，这里是follower的日志缺少了miss一部分
 		reply.Success = false
@@ -51,22 +54,6 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 
 	reply.Success = true
 	reply.FollowerTerm = rf.currentTerm
-	//XXX可能日志后面有冲突的，先把后面的都清掉 保留了一致的部分[0,PrevLogIndex-1]
-	//!!这里索引不对，没有修改
-	//rf.Log.Entries = rf.Log.Entries[:args.PrevLogIndex]
-	//加入收到的leader发来的新日志
-	//if len(args.Logs) != 0 {
-	//	//避免重复，因为和之前是相同的
-	//	rf.Log.Entries = append(rf.Log.Entries, args.Logs...)
-	//	rf.Log.LastLogIndex = len(rf.Log.Entries)
-	//	// 打印输出新增的日志的具体内容
-	//	for i := 0; i < len(rf.Log.Entries); i++ {
-	//		logEntry := rf.Log.Entries[i]
-	//		DPrintf("Node %d now entry command is : %v", rf.me, logEntry.Command)
-	//	}
-	//
-	//	DPrintf("Node %d appended new entries from leader %d; last log index now %d", rf.me, args.LeaderId, rf.Log.LastLogIndex)
-	//}
 	ok := true
 	for i, entry := range args.Logs {
 		index := args.PrevLogIndex + i + 1
@@ -219,14 +206,15 @@ func (rf *Raft) tryCommit(matchIndex int) {
 	}
 
 	if cnt > len(rf.peers)/2 {
-		rf.commitIndex = matchIndex
+		rf.commitIndex = matchIndex //leader已经可以提交matchIndex这里的日志了，半数以上投票了
+		//发生事件 leader 的 commitIndex更新了
 		if rf.commitIndex > rf.Log.LastLogIndex {
 			DPrintf("%v: commitIndex > lastlogindex %v > %v", rf.SayMeL(), rf.commitIndex, rf.Log.LastLogIndex)
 			panic("")
 		}
 		// DPrintf(500, "%v: commitIndex = %v ,entries=%v", rf.SayMeL(), rf.commitIndex, rf.log.Entries)
 		DPrintf("%v: 主结点已经提交了index为%d的日志，rf.lastApplied=%v rf.commitIndex=%v", rf.SayMeL(), rf.commitIndex, rf.lastApplied, rf.commitIndex)
-		rf.applyCond.Broadcast() // 通知每个节点的协程去检查当前commitIndex
+		rf.applyCond.Broadcast() // 通知每个节点的协程去检查当前commitIndex,但实际上这里只有leader的协程会奏效
 	} else {
 		DPrintf("\n%v: 未超过半数节点在此索引index : %d 上的日志相等，拒绝提交....\n", rf.SayMeL(), matchIndex)
 	}

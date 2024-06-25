@@ -18,6 +18,8 @@ package raft
 //
 
 import (
+	"6.824/labgob"
+	"bytes"
 	"fmt"
 	//	"bytes"
 	"sync"
@@ -130,32 +132,36 @@ func (rf *Raft) GetState() (int, bool) {
 func (rf *Raft) persist() {
 	// Your code here (2C).
 	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	e.Encode(rf.Log)
+	data := w.Bytes()
+	go rf.persister.SaveRaftState(data)
 }
 
 // restore previously persisted state.
 func (rf *Raft) readPersist(data []byte) {
-	if data == nil || len(data) < 1 { // bootstrap without any state?
+	stateData := rf.persister.ReadRaftState()
+	if stateData == nil || len(stateData) < 1 { // bootstrap without any state?
 		return
 	}
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	// Your code here (2C).
-	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	if stateData != nil && len(stateData) > 0 { // bootstrap without any state?
+		r := bytes.NewBuffer(stateData)
+		d := labgob.NewDecoder(r)
+		rf.votedFor = 0 // in case labgob waring
+		if d.Decode(&rf.currentTerm) != nil ||
+			d.Decode(&rf.votedFor) != nil ||
+			d.Decode(&rf.Log) != nil {
+			//   error...
+			DPrintf("%v: readPersist decode error\n", rf.SayMeL())
+			panic("")
+		}
+	}
 }
 
 // A service wants to switch to snapshot.  Only do so if Raft hasn't
@@ -209,6 +215,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	}
 
 	// 如果请求的term大于当前的term，当前节点应该变成follower
+	//这里存在那种网络分区很久出来的节点他的term很高，会导致现在的leader重新选举，但是重新选举这个旧的节点日志不够新也不行
 	if args.Term > rf.currentTerm {
 		rf.currentTerm = args.Term
 		rf.votedFor = -1 // 重置已投票节点
@@ -320,6 +327,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		rf.Log.LastLogIndex = index
 		rf.nextIndex[rf.me]++
 		rf.matchIndex[rf.me] = rf.nextIndex[rf.me] - 1
+		rf.persist()
 		DPrintf("Leader %d added a new log entry at index %d with term %d, command: %v", rf.me, index, term, command)
 		go rf.StartAppendEntries(false)
 
@@ -395,6 +403,7 @@ func (rf *Raft) sendMsgToTester() {
 		DPrintf("%v: Woken up. Checking for new entries to apply...", rf.me)
 		//返回的时候已经拿到了互斥锁
 		//此时被唤醒的协程，说明有leader的commitIndex更新了。此时leader肯定会去将新提交的日志去应用到状态机中
+		//这也可能是leader的commitIndex更新后，leader去提交本地的日志到状态机中
 		for rf.lastApplied < rf.commitIndex {
 			i := rf.lastApplied + 1
 			rf.lastApplied++
