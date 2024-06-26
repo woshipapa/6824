@@ -86,9 +86,31 @@ func (rf *Raft) sendInstallSnapshot(serverId int) {
 	if !ok {
 		return
 	}
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
+	if rf.state != Leader {
+		DPrintf("%v: 因为不是leader，放弃处理%d的快照响应", rf.SayMeL(), serverId)
+		return
+	}
+	if reply.Term < rf.currentTerm {
+		DPrintf("%v: 因为是旧的快照响应，放弃处理%d的快照响应, 旧响应的任期是%d", rf.SayMeL(), serverId, reply.Term)
+		return
+	}
+	if reply.Term > rf.currentTerm {
+		rf.votedFor = -1
+		rf.state = Follower
+		rf.currentTerm = reply.Term
+		rf.persist()
+		return
+	}
+	rf.nextIndex[serverId] = args.LastIncludeIndex + 1
+	rf.matchIndex[serverId] = args.LastIncludeIndex
+	DPrintf("%v: 更新节点%d的nextIndex为%d, matchIndex为%d", rf.SayMeL(), serverId, rf.nextIndex[serverId], args.LastIncludeIndex)
+
+	rf.tryCommit(rf.matchIndex[serverId])
 }
 func (rf *Raft) sendRequestInstallSnapshot(server int, args *RequestInstallSnapShotArgs, reply *RequestInstallSnapShotReply) bool {
-	ok := rf.peers[server].Call("Raft.InstallSnapshot", args, reply)
+	ok := rf.peers[server].Call("Raft.InstallSnapShot", args, reply)
 	return ok
 }
