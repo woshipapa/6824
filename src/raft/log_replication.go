@@ -166,7 +166,9 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 			}
 			if conflictIndex != -1 {
 				rf.nextIndex[targetServerId] = conflictIndex + 1
+				//下次leader在去和这个follower联系时，他们比较的就是相同任期的日志了
 			} else {
+				//这里说明leader中不含这个任期的日志，follower中这些任期的都不要了，所以从follower这些任期的第一个开始
 				rf.nextIndex[targetServerId] = reply.ConflictIndex
 			}
 		}

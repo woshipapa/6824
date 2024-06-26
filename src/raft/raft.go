@@ -137,6 +137,8 @@ func (rf *Raft) persist() {
 	e.Encode(rf.currentTerm)
 	e.Encode(rf.votedFor)
 	e.Encode(rf.Log)
+	e.Encode(rf.commitIndex)
+	e.Encode(rf.lastApplied)
 	data := w.Bytes()
 	go rf.persister.SaveRaftState(data)
 }
@@ -156,7 +158,9 @@ func (rf *Raft) readPersist(data []byte) {
 		rf.votedFor = 0 // in case labgob waring
 		if d.Decode(&rf.currentTerm) != nil ||
 			d.Decode(&rf.votedFor) != nil ||
-			d.Decode(&rf.Log) != nil {
+			d.Decode(&rf.Log) != nil ||
+			d.Decode(&rf.commitIndex) != nil ||
+			d.Decode(&rf.lastApplied) != nil {
 			//   error...
 			DPrintf("%v: readPersist decode error\n", rf.SayMeL())
 			panic("")
