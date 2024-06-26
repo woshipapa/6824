@@ -243,7 +243,7 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 		rf.Log.FirstLogIndex = newFirstLogIndex
 		rf.commitIndex = max(rf.commitIndex, index)
 		rf.lastApplied = max(rf.lastApplied, index)
-		DPrintf("%v:进行快照后，更新commitIndex为%d, lastApplied为%d, FirstLogIndex"+
+		DPrintf("%v:进行快照后，更新commitIndex为%d, lastApplied为%d, FirstLogIndex: %d "+
 			"但是snapshotLastIncludeIndex是%d", rf.SayMeL(), rf.commitIndex, rf.lastApplied, rf.Log.FirstLogIndex, rf.snapshotLastIncludeIndex)
 
 		rf.persist()
