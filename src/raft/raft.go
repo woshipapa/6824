@@ -144,6 +144,7 @@ func (rf *Raft) persist() {
 	e.Encode(rf.Log)
 	e.Encode(rf.snapshotLastIncludeIndex)
 	e.Encode(rf.snapshotLastIncludeTerm)
+	e.Encode(rf.ApplyHelper.lastItemIndex)
 	//e.Encode(rf.commitIndex)
 	//e.Encode(rf.lastApplied)
 	data := w.Bytes()
@@ -172,7 +173,8 @@ func (rf *Raft) readPersist(data []byte) {
 			d.Decode(&rf.votedFor) != nil ||
 			d.Decode(&rf.Log) != nil ||
 			d.Decode(&rf.snapshotLastIncludeIndex) != nil ||
-			d.Decode(&rf.snapshotLastIncludeTerm) != nil {
+			d.Decode(&rf.snapshotLastIncludeTerm) != nil ||
+			d.Decode(&rf.ApplyHelper.lastItemIndex) != nil {
 			//   error...
 			DPrintf("%v: readPersist decode error\n", rf.SayMeL())
 			panic("")
@@ -186,7 +188,7 @@ func (rf *Raft) readPersist(data []byte) {
 			//DPrintf("lastApplied: %v\n", rf.lastApplied)
 			DPrintf("lastIncludedTerm: %v\n", rf.snapshotLastIncludeTerm)
 			DPrintf("lastIncludedIndex: %v\n", rf.snapshotLastIncludeIndex)
-
+			DPrintf("ApplyHelper lastItemIndex : %v\n", rf.ApplyHelper.lastItemIndex)
 			DPrintf("Log: FirstLogIndex: %v, LastLogIndex: %v, Entries: %v\n", rf.Log.FirstLogIndex, rf.Log.LastLogIndex, rf.Log.Entries)
 			rf.snapshot = rf.persister.ReadSnapshot()
 			rf.commitIndex = rf.snapshotLastIncludeIndex
