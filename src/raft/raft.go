@@ -137,8 +137,8 @@ func (rf *Raft) persist() {
 	e.Encode(rf.currentTerm)
 	e.Encode(rf.votedFor)
 	e.Encode(rf.Log)
-	e.Encode(rf.commitIndex)
-	e.Encode(rf.lastApplied)
+	//e.Encode(rf.commitIndex)
+	//e.Encode(rf.lastApplied)
 	data := w.Bytes()
 	go rf.persister.SaveRaftState(data)
 }
@@ -158,9 +158,7 @@ func (rf *Raft) readPersist(data []byte) {
 		rf.votedFor = 0 // in case labgob waring
 		if d.Decode(&rf.currentTerm) != nil ||
 			d.Decode(&rf.votedFor) != nil ||
-			d.Decode(&rf.Log) != nil ||
-			d.Decode(&rf.commitIndex) != nil ||
-			d.Decode(&rf.lastApplied) != nil {
+			d.Decode(&rf.Log) != nil {
 			//   error...
 			DPrintf("%v: readPersist decode error\n", rf.SayMeL())
 			panic("")
@@ -426,7 +424,7 @@ func (rf *Raft) sendMsgToTester() {
 			i := rf.lastApplied + 1
 			rf.lastApplied++
 			//DPrintf("%v: Before applying log, lastApplied=%v", rf.me, rf.lastApplied)
-			rf.persist() // maybe 不必要
+			//rf.persist() // maybe 不必要
 			//if i < rf.log.FirstLogIndex {
 			//	DPrintf(11111, "BUG：The rf.commitIndex is %d, term is %d, lastLogIndex is %d, and the log is %v", rf.commitIndex, rf.currentTerm, rf.log.LastLogIndex, rf.log.Entries)
 			//	DPrintf(11111, "%v: apply index=%v but rf.log.FirstLogIndex=%v rf.lastApplied=%v\n",
