@@ -299,7 +299,7 @@ func (cfg *config) start1(i int, applier func(int, chan ApplyMsg)) {
 	// pass Make() the last persisted state.
 	if cfg.saved[i] != nil {
 		cfg.saved[i] = cfg.saved[i].Copy()
-
+		//读取之间的快照
 		snapshot := cfg.saved[i].ReadSnapshot()
 		if snapshot != nil && len(snapshot) > 0 {
 			// mimic KV server and process snapshot now.

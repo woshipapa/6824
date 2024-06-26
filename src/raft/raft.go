@@ -164,6 +164,19 @@ func (rf *Raft) readPersist(data []byte) {
 			//   error...
 			DPrintf("%v: readPersist decode error\n", rf.SayMeL())
 			panic("")
+		} else {
+			// 成功解码后，输出持久化状态的内容
+			DPrintf("%v: readPersist successfully\n", rf.SayMeL())
+			DPrintf("currentTerm: %v\n", rf.currentTerm)
+			DPrintf("votedFor: %v\n", rf.votedFor)
+			DPrintf("commitIndex: %v\n", rf.commitIndex)
+			DPrintf("lastApplied: %v\n", rf.lastApplied)
+
+			// 输出 Log 的详细内容
+			DPrintf("Log: FirstLogIndex: %v, LastLogIndex: %v, Entries:\n", rf.Log.FirstLogIndex, rf.Log.LastLogIndex)
+			for i, entry := range rf.Log.Entries {
+				DPrintf("Entry %d: Term: %v, Command: %v\n", i, entry.Term, entry.Command)
+			}
 		}
 	}
 }
@@ -483,6 +496,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.ApplyHelper = NewApplyHelper(applyCh, rf.lastApplied)
 	rf.applyCond = sync.NewCond(&rf.mu)
 	// initialize from state persisted before a crash
+	//!!!Make的时候，因为这里拷贝了之前的旧状态，就是通过Copy函数，这里直接读取
 	rf.readPersist(persister.ReadRaftState())
 
 	// start ticker goroutine to start elections
