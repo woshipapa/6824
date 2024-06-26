@@ -112,14 +112,23 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	if !ok {
 		rf.Log.LastLogIndex = args.PrevLogIndex + len(args.Logs)
 	}
-	//follower去将日志更新到状态机中去
 	if args.LeaderCommit > rf.commitIndex {
-		//说明该把 [rf.lastapplied,args.LeaderCommit]这部分的指令去应用到状态机中
+		// 输出当前的 lastApplied、LeaderCommit 和 commitIndex
+		DPrintf("Before updating commitIndex: Node %d, lastApplied=%d, LeaderCommit=%d, commitIndex=%d, LastLogIndex=%d",
+			rf.me, rf.lastApplied, args.LeaderCommit, rf.commitIndex, rf.Log.LastLogIndex)
+
+		// 更新 commitIndex
 		rf.commitIndex = min(args.LeaderCommit, rf.Log.LastLogIndex)
+
+		// 输出更新后的 commitIndex
+		DPrintf("After updating commitIndex: Node %d, new commitIndex=%d", rf.me, rf.commitIndex)
+
 		if rf.commitIndex > rf.lastApplied {
-			rf.applyCond.Broadcast() //唤醒每个follower等待应用日志到状态机的协程 sendMsgToTester
+			// 唤醒每个等待应用日志到状态机的协程
+			rf.applyCond.Broadcast()
 		}
 	}
+
 }
 
 //	func (rf *Raft) applyLogs() {
