@@ -93,6 +93,11 @@ type Raft struct {
 	//applyCh   chan ApplyMsg
 	ApplyHelper *ApplyHelper
 	applyCond   *sync.Cond
+
+	//2D
+	snapshotLastIncludeIndex int
+	snapshotLastIncludeTerm  int
+	snapshot                 []byte
 }
 
 type AppendEntriesArgs struct {
@@ -137,10 +142,17 @@ func (rf *Raft) persist() {
 	e.Encode(rf.currentTerm)
 	e.Encode(rf.votedFor)
 	e.Encode(rf.Log)
+	e.Encode(rf.snapshotLastIncludeIndex)
+	e.Encode(rf.snapshotLastIncludeTerm)
 	//e.Encode(rf.commitIndex)
 	//e.Encode(rf.lastApplied)
 	data := w.Bytes()
-	go rf.persister.SaveRaftState(data)
+	if rf.snapshotLastIncludeIndex > 0 {
+		rf.persister.SaveStateAndSnapshot(data, rf.snapshot)
+	} else {
+		rf.persister.SaveRaftState(data)
+	}
+	/*	go rf.persister.SaveRaftState(data)*/
 }
 
 // restore previously persisted state.
@@ -158,23 +170,31 @@ func (rf *Raft) readPersist(data []byte) {
 		rf.votedFor = 0 // in case labgob waring
 		if d.Decode(&rf.currentTerm) != nil ||
 			d.Decode(&rf.votedFor) != nil ||
-			d.Decode(&rf.Log) != nil {
+			d.Decode(&rf.Log) != nil ||
+			d.Decode(&rf.snapshotLastIncludeIndex) != nil ||
+			d.Decode(&rf.snapshotLastIncludeTerm) != nil {
 			//   error...
 			DPrintf("%v: readPersist decode error\n", rf.SayMeL())
 			panic("")
 		} else {
 			// 成功解码后，输出持久化状态的内容
+
 			DPrintf("%v: readPersist successfully\n", rf.SayMeL())
 			DPrintf("currentTerm: %v\n", rf.currentTerm)
 			DPrintf("votedFor: %v\n", rf.votedFor)
-			DPrintf("commitIndex: %v\n", rf.commitIndex)
-			DPrintf("lastApplied: %v\n", rf.lastApplied)
+			//DPrintf("commitIndex: %v\n", rf.commitIndex)
+			//DPrintf("lastApplied: %v\n", rf.lastApplied)
 
-			// 输出 Log 的详细内容
-			DPrintf("Log: FirstLogIndex: %v, LastLogIndex: %v, Entries:\n", rf.Log.FirstLogIndex, rf.Log.LastLogIndex)
-			for i, entry := range rf.Log.Entries {
-				DPrintf("Entry %d: Term: %v, Command: %v\n", i, entry.Term, entry.Command)
-			}
+			//// 输出 Log 的详细内容
+			//DPrintf("Log: FirstLogIndex: %v, LastLogIndex: %v, Entries:\n", rf.Log.FirstLogIndex, rf.Log.LastLogIndex)
+			//for i, entry := range rf.Log.Entries {
+			//	DPrintf("Entry %d: Term: %v, Command: %v\n", i, entry.Term, entry.Command)
+			//}
+			rf.snapshot = rf.persister.ReadSnapshot()
+			rf.commitIndex = rf.snapshotLastIncludeIndex
+			rf.lastApplied = rf.snapshotLastIncludeIndex
+			DPrintf("%v: 节点被宕机重启，成功加载获取持久化数据", rf.SayMeL())
+
 		}
 	}
 }
@@ -194,6 +214,48 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 // that index. Raft should now trim its log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (2D).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	if rf.state != Leader {
+		return
+	}
+	DPrintf("%v: come Snapshot index=%v", rf.SayMeL(), index)
+	if rf.Log.FirstLogIndex <= index {
+		if index > rf.lastApplied {
+			panic(fmt.Sprintf("%v: index=%v rf.lastApplied=%v\n", rf.SayMeL(), index, rf.lastApplied))
+		}
+		rf.snapshot = snapshot
+		rf.snapshotLastIncludeIndex = index
+		rf.snapshotLastIncludeTerm = rf.getEntryTerm(index)
+		// Snapshot{
+		// 	LastIncludeIndex: index,
+		// 	LastIncludeTerm:  rf.getEntryTerm(index),
+		// 	Data:             snapshot,
+		// }
+		newFirstLogIndex := index + 1
+		if newFirstLogIndex <= rf.Log.LastLogIndex {
+			rf.Log.Entries = rf.Log.Entries[newFirstLogIndex-rf.Log.FirstLogIndex:]
+			DPrintf("%v: 被快照截断后的日志为: %v", rf.SayMeL(), rf.Log.Entries)
+		} else {
+			rf.Log.LastLogIndex = newFirstLogIndex - 1
+			rf.Log.Entries = make([]Entry, 0)
+		}
+		rf.Log.FirstLogIndex = newFirstLogIndex
+		rf.commitIndex = max(rf.commitIndex, index)
+		rf.lastApplied = max(rf.lastApplied, index)
+		DPrintf("%v:进行快照后，更新commitIndex为%d, lastApplied为%d, "+
+			"但是snapshotLastIncludeIndex是%d", rf.SayMeL(), rf.commitIndex, rf.lastApplied, rf.snapshotLastIncludeIndex)
+
+		rf.persist()
+		for i := 0; i < len(rf.peers); i++ {
+			if i == rf.me {
+				continue
+			}
+			go rf.sendInstallSnapshot(i)
+		}
+		//DPrintf(11, "%v: len(rf.log.Entries)=%v rf.log.FirstLogIndex=%v rf.log.LastLogIndex=%v rf.commitIndex=%v  rf.lastApplied=%v\n",
+		//	rf.SayMeL(), len(rf.log.Entries), rf.log.FirstLogIndex, rf.log.LastLogIndex, rf.commitIndex, rf.lastApplied)
+	}
 
 }
 
@@ -517,6 +579,14 @@ func (rf *Raft) sendLogAppendEntries(targetServerId int) {
 	}
 
 	prevLogIndex := min(rf.nextIndex[targetServerId]-1, rf.Log.LastLogIndex)
+
+	if prevLogIndex+1 < rf.Log.FirstLogIndex {
+		DPrintf("%v: 节点%d日志匹配索引为%d更新速度太慢，准备发送快照", rf.SayMeL(), targetServerId, prevLogIndex)
+		go rf.sendInstallSnapshot(targetServerId)
+		rf.mu.Unlock()
+		return
+	}
+
 	prevLogTerm := rf.getEntryTerm(prevLogIndex)
 	//这里是有可能是空的新增目录，就是因为他按照ticker协程的间隔去发送时，如果不是心跳，而且又没有新的命令就会出现这种情况
 	entries := append([]Entry{}, rf.Log.Entries[rf.Log.getRealIndex(prevLogIndex+1):]...)

@@ -28,6 +28,31 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 
 	defer rf.persist()
 
+	if rf.Log.empty() {
+		// 首先可以确定的是，主结点的args.PrevLogIndex = min(rf.nextIndex[i]-1, rf.lastLogIndex)
+		// 这可以比从节点的rf.snapshotLastIncludeIndex大、小或者等价， 因为可以根据
+		// args.PrevLogIndex的计算式子得出，nextIndex在leader刚选出时是0，
+		// 日志为空，要么是节点刚启动的初始状态，要么是被快照截断后的状态
+		// 在初始状态，两者都是0，从节点可以全部接收日志，
+		// 若被日志截断，则rf.snapshotLastIncludeIndex前面的日志都是无效的，
+		// args.PrevLogIndex >  rf.snapshotLastIncludeIndex 这部分
+		// 日志肯定不能插入，所以也会丢弃
+		if args.PrevLogIndex == rf.snapshotLastIncludeIndex {
+			rf.Log.appendL(args.Logs...)
+			reply.FollowerTerm = rf.currentTerm
+			reply.Success = true
+			//reply. = rf.log.LastLogIndex
+			//reply.PrevLogTerm = rf.getLastEntryTerm()
+			return
+		} else {
+			reply.FollowerTerm = rf.currentTerm
+			reply.Success = false
+			reply.ConflictIndex = rf.Log.LastLogIndex
+			reply.ConflictTerm = rf.getLastEntryTerm()
+			return
+		}
+	}
+
 	if args.PrevLogIndex > rf.Log.LastLogIndex {
 		//follower的日志短于leader的，这里是follower的日志缺少了miss一部分
 		reply.Success = false
@@ -45,6 +70,9 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 			reply.ConflictTerm = rf.getEntryTerm(args.PrevLogIndex)                              //当前follower的最后一条日志条录的term，但是他与当前leader认为相同位置的日志条目term不同
 			reply.ConflictIndex = rf.findFirstIndexOfTerm(args.PrevLogIndex, reply.ConflictTerm) //找到这个不符合的term的第一个，可以减少很多的AppendEntries
 			//reply.ConflictIndex = args.PrevLogIndex - 1
+			if reply.ConflictIndex < rf.Log.FirstLogIndex {
+				reply.ConflictIndex = rf.snapshotLastIncludeIndex + 1
+			}
 			DPrintf("Node %d log inconsistency at index %d; found term %d, expected %d", rf.me, args.PrevLogIndex, reply.ConflictTerm, args.PrevLogTerm)
 			return
 		}
@@ -149,6 +177,15 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 	} else {
 		index := reply.ConflictIndex
 		term := reply.ConflictTerm
+		if rf.Log.empty() { //判掉为空的情况 方便后面讨论
+			go rf.sendInstallSnapshot(targetServerId)
+			return
+		}
+		if reply.ConflictIndex < rf.Log.FirstLogIndex {
+			go rf.sendInstallSnapshot(targetServerId)
+
+			return
+		}
 		if term == -1 {
 			DPrintf("Follower %d log shorter than expected, adjusting nextIndex to %d", targetServerId, max(1, index))
 			//说明follower的日志条目比较短还没有到预期的index，所以下调到follower对应的位置
@@ -158,7 +195,7 @@ func (rf *Raft) handleAppendEntriesReply(targetServerId int, args *AppendEntries
 			//rf.nextIndex[targetServerId] = index
 			conflictIndex := -1
 			//leader先找，看能不能找到与冲突任期相同的日志，有的话就是返回这个任期的最后一个再去和follower比对
-			for i := args.PrevLogIndex; i > 0; i-- {
+			for i := args.PrevLogIndex; i >= rf.Log.FirstLogIndex; i-- {
 				if rf.getEntryTerm(i) == reply.ConflictTerm {
 					conflictIndex = i
 					break
@@ -183,7 +220,7 @@ func (rf *Raft) findFirstIndexOfTerm(preLogIndex int, term int) int {
 			return i + 1
 		}
 	}
-	return 1
+	return rf.Log.FirstLogIndex
 }
 
 func (rf *Raft) tryCommit(matchIndex int) {

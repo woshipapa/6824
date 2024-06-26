@@ -34,14 +34,16 @@ func (log *Log) getOneEntry(index int) *Entry {
 }
 func (rf *Raft) getEntryTerm(index int) int {
 	if index == 0 {
-		//这个是空的
-		return -1
+		return 0
 	}
-
+	if index == rf.Log.FirstLogIndex-1 {
+		return rf.snapshotLastIncludeTerm
+	}
 	if rf.Log.FirstLogIndex <= rf.Log.LastLogIndex {
 		return rf.Log.getOneEntry(index).Term
 	}
 
+	DPrintf("invalid index=%v in getEntryTerm rf.log.FirstLogIndex=%v rf.log.LastLogIndex=%v\n", index, rf.Log.FirstLogIndex, rf.Log.LastLogIndex)
 	return -1
 }
 func (log *Log) appendL(newEntries ...Entry) {
@@ -49,4 +51,7 @@ func (log *Log) appendL(newEntries ...Entry) {
 	log.Entries = append(log.Entries[:log.getRealIndex(log.LastLogIndex)+1], newEntries...)
 	log.LastLogIndex += len(newEntries)
 
+}
+func (log *Log) empty() bool {
+	return log.FirstLogIndex > log.LastLogIndex
 }
