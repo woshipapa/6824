@@ -425,6 +425,8 @@ func (rf *Raft) sendMsgToTester() {
 		for rf.lastApplied < rf.commitIndex {
 			i := rf.lastApplied + 1
 			rf.lastApplied++
+			//DPrintf("%v: Before applying log, lastApplied=%v", rf.me, rf.lastApplied)
+			rf.persist() // maybe 不必要
 			//if i < rf.log.FirstLogIndex {
 			//	DPrintf(11111, "BUG：The rf.commitIndex is %d, term is %d, lastLogIndex is %d, and the log is %v", rf.commitIndex, rf.currentTerm, rf.log.LastLogIndex, rf.log.Entries)
 			//	DPrintf(11111, "%v: apply index=%v but rf.log.FirstLogIndex=%v rf.lastApplied=%v\n",
@@ -439,7 +441,7 @@ func (rf *Raft) sendMsgToTester() {
 			}
 			DPrintf("%v: Applying log at index=%v, Command=%v", rf.me, i, msg.Command)
 			rf.ApplyHelper.tryApply(&msg)
-			rf.persist() // maybe 不必要
+
 		}
 	}
 }
