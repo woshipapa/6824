@@ -144,7 +144,7 @@ func (rf *Raft) persist() {
 	e.Encode(rf.Log)
 	e.Encode(rf.snapshotLastIncludeIndex)
 	e.Encode(rf.snapshotLastIncludeTerm)
-	e.Encode(rf.ApplyHelper.lastItemIndex)
+	//e.Encode(rf.ApplyHelper.lastItemIndex)
 	//e.Encode(rf.commitIndex)
 	//e.Encode(rf.lastApplied)
 	data := w.Bytes()
@@ -173,8 +173,7 @@ func (rf *Raft) readPersist(data []byte) {
 			d.Decode(&rf.votedFor) != nil ||
 			d.Decode(&rf.Log) != nil ||
 			d.Decode(&rf.snapshotLastIncludeIndex) != nil ||
-			d.Decode(&rf.snapshotLastIncludeTerm) != nil ||
-			d.Decode(&rf.ApplyHelper.lastItemIndex) != nil {
+			d.Decode(&rf.snapshotLastIncludeTerm) != nil {
 			//   error...
 			DPrintf("%v: readPersist decode error\n", rf.SayMeL())
 			panic("")
@@ -188,7 +187,7 @@ func (rf *Raft) readPersist(data []byte) {
 			//DPrintf("lastApplied: %v\n", rf.lastApplied)
 			DPrintf("lastIncludedTerm: %v\n", rf.snapshotLastIncludeTerm)
 			DPrintf("lastIncludedIndex: %v\n", rf.snapshotLastIncludeIndex)
-			DPrintf("ApplyHelper lastItemIndex : %v\n", rf.ApplyHelper.lastItemIndex)
+			//DPrintf("ApplyHelper lastItemIndex : %v\n", rf.ApplyHelper.lastItemIndex)
 			DPrintf("Log: FirstLogIndex: %v, LastLogIndex: %v, Entries: %v\n", rf.Log.FirstLogIndex, rf.Log.LastLogIndex, rf.Log.Entries)
 			rf.snapshot = rf.persister.ReadSnapshot()
 			rf.commitIndex = rf.snapshotLastIncludeIndex
@@ -557,7 +556,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.heartbeatTimeout = heartbeatTimeout
 	rf.Log = NewLog()
 	//rf.applyCh = applyCh
-	rf.ApplyHelper = NewApplyHelper(applyCh, rf.lastApplied)
+
 	rf.applyCond = sync.NewCond(&rf.mu)
 	// initialize from state persisted before a crash
 	//!!!Make的时候，因为这里拷贝了之前的旧状态，就是通过Copy函数，这里直接读取
@@ -566,7 +565,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.snapshotLastIncludeIndex = 0
 	rf.snapshotLastIncludeTerm = 0
 	rf.readPersist(persister.ReadRaftState())
-
+	//这里的位置很关键，lastApplied的值是快照的最后一个元素的位置，决定了ApplyHelper中的lastItemIndex的判定
+	rf.ApplyHelper = NewApplyHelper(applyCh, rf.lastApplied)
 	// start ticker goroutine to start elections
 	go rf.ticker()
 
