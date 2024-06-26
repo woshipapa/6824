@@ -72,7 +72,7 @@ func (applyHelper *ApplyHelper) applier() {
 func (applyHelper *ApplyHelper) tryApply(msg *ApplyMsg) bool {
 	applyHelper.mu.Lock()
 	defer applyHelper.mu.Unlock()
-	//DPrintf("applyhelper get msg index=%v", ifCond(msg.CommandValid, msg.CommandIndex, msg.SnapshotIndex))
+	DPrintf("applyhelper get msg index=%v", ifCond(msg.CommandValid, msg.CommandIndex, msg.SnapshotIndex))
 	if msg.CommandValid {
 		if msg.CommandIndex <= applyHelper.lastItemIndex {
 			return true
@@ -84,6 +84,8 @@ func (applyHelper *ApplyHelper) tryApply(msg *ApplyMsg) bool {
 			DPrintf("applyhelper added command msg to queue and broadcasted with index=%v and command = %v", msg.CommandIndex, msg.Command)
 			return true
 		}
+
+		DPrintf("applyhelper encountered unexpected command msg index=%v, lastItemIndex=%v", msg.CommandIndex, applyHelper.lastItemIndex)
 		panic("applyhelper meet false")
 		return false
 	} else if msg.SnapshotValid {

@@ -559,6 +559,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.applyCond = sync.NewCond(&rf.mu)
 	// initialize from state persisted before a crash
 	//!!!Make的时候，因为这里拷贝了之前的旧状态，就是通过Copy函数，这里直接读取
+
+	rf.snapshot = nil
+	rf.snapshotLastIncludeIndex = 0
+	rf.snapshotLastIncludeTerm = 0
 	rf.readPersist(persister.ReadRaftState())
 
 	// start ticker goroutine to start elections
