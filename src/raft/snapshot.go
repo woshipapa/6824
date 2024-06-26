@@ -11,7 +11,7 @@ type RequestInstallSnapShotReply struct {
 	Term int
 }
 
-func (rf *Raft) InstallSnapShot(args RequestInstallSnapShotArgs, reply *RequestInstallSnapShotReply) {
+func (rf *Raft) InstallSnapShot(args *RequestInstallSnapShotArgs, reply *RequestInstallSnapShotReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	//defer DPrintf(11, "%v: RequestInstallSnapshot end  args.LeaderId=%v, args.LastIncludeIndex=%v, args.LastIncludeTerm=%v\n", rf.SayMeL(), args.LeaderId, args.LastIncludeIndex, args.LastIncludeTerm)
