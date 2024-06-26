@@ -414,6 +414,7 @@ func (rf *Raft) ticker() {
 func (rf *Raft) sendMsgToTester() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	defer rf.persist() //maybe 不必要
 	for !rf.killed() {
 		//DPrintf("%v: it is being blocked...", rf.me)
 		rf.applyCond.Wait()
@@ -438,6 +439,7 @@ func (rf *Raft) sendMsgToTester() {
 			}
 			DPrintf("%v: Applying log at index=%v, Command=%v", rf.me, i, msg.Command)
 			rf.ApplyHelper.tryApply(&msg)
+			rf.persist() // maybe 不必要
 		}
 	}
 }

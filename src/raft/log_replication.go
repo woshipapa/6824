@@ -215,6 +215,7 @@ func (rf *Raft) tryCommit(matchIndex int) {
 			DPrintf("%v: commitIndex > lastlogindex %v > %v", rf.SayMeL(), rf.commitIndex, rf.Log.LastLogIndex)
 			panic("")
 		}
+		rf.persist() // 可能没必要
 		// DPrintf(500, "%v: commitIndex = %v ,entries=%v", rf.SayMeL(), rf.commitIndex, rf.log.Entries)
 		DPrintf("%v: 主结点已经提交了index为%d的日志，rf.lastApplied=%v rf.commitIndex=%v", rf.SayMeL(), rf.commitIndex, rf.lastApplied, rf.commitIndex)
 		rf.applyCond.Broadcast() // 通知每个节点的协程去检查当前commitIndex,但实际上这里只有leader的协程会奏效
