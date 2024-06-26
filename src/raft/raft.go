@@ -243,8 +243,8 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 		rf.Log.FirstLogIndex = newFirstLogIndex
 		rf.commitIndex = max(rf.commitIndex, index)
 		rf.lastApplied = max(rf.lastApplied, index)
-		DPrintf("%v:进行快照后，更新commitIndex为%d, lastApplied为%d, "+
-			"但是snapshotLastIncludeIndex是%d", rf.SayMeL(), rf.commitIndex, rf.lastApplied, rf.snapshotLastIncludeIndex)
+		DPrintf("%v:进行快照后，更新commitIndex为%d, lastApplied为%d, FirstLogIndex"+
+			"但是snapshotLastIncludeIndex是%d", rf.SayMeL(), rf.commitIndex, rf.lastApplied, rf.Log.FirstLogIndex, rf.snapshotLastIncludeIndex)
 
 		rf.persist()
 		for i := 0; i < len(rf.peers); i++ {
@@ -581,7 +581,7 @@ func (rf *Raft) sendLogAppendEntries(targetServerId int) {
 	prevLogIndex := min(rf.nextIndex[targetServerId]-1, rf.Log.LastLogIndex)
 
 	if prevLogIndex+1 < rf.Log.FirstLogIndex {
-		DPrintf("%v: 节点%d日志匹配索引为%d更新速度太慢，准备发送快照", rf.SayMeL(), targetServerId, prevLogIndex)
+		DPrintf("%v: 节点%d 日志匹配索引为%d更新速度太慢，准备发送快照(这个是在日常心跳的时候发的)", rf.SayMeL(), targetServerId, prevLogIndex)
 		go rf.sendInstallSnapshot(targetServerId)
 		rf.mu.Unlock()
 		return

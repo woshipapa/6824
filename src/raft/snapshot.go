@@ -54,7 +54,7 @@ func (rf *Raft) InstallSnapShot(args *RequestInstallSnapShotArgs, reply *Request
 				SnapshotTerm:  rf.snapshotLastIncludeTerm,
 				SnapshotIndex: rf.snapshotLastIncludeIndex,
 			}
-			DPrintf("%v: next apply snapshot rf.snapshot.LastIncludeIndex=%v rf.snapshot.LastIncludeTerm=%v\n", rf.SayMeL(), rf.snapshotLastIncludeIndex, rf.snapshotLastIncludeTerm)
+			DPrintf("%v: next apply snapshot from lastApplied = %v to rf.snapshot.LastIncludeIndex=%v rf.snapshot.LastIncludeTerm=%v\n", rf.SayMeL(), rf.lastApplied, rf.snapshotLastIncludeIndex, rf.snapshotLastIncludeTerm)
 			rf.ApplyHelper.tryApply(&msg)
 			rf.lastApplied = args.LastIncludeIndex
 		}

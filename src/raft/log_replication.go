@@ -29,6 +29,7 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 	defer rf.persist()
 
 	if rf.Log.empty() {
+		DPrintf("Node %d: Log is empty, PrevLogIndex=%d, snapshotLastIncludeIndex=%d", rf.me, args.PrevLogIndex, rf.snapshotLastIncludeIndex)
 		// 首先可以确定的是，主结点的args.PrevLogIndex = min(rf.nextIndex[i]-1, rf.lastLogIndex)
 		// 这可以比从节点的rf.snapshotLastIncludeIndex大、小或者等价， 因为可以根据
 		// args.PrevLogIndex的计算式子得出，nextIndex在leader刚选出时是0，
@@ -62,7 +63,14 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 		return
 	}
 	if args.PrevLogIndex <= rf.Log.LastLogIndex {
-
+		if args.PrevLogIndex < rf.snapshotLastIncludeIndex {
+			DPrintf("Node %d: PrevLogIndex (%d) is less than snapshotLastIncludeIndex (%d)", rf.me, args.PrevLogIndex, rf.snapshotLastIncludeIndex)
+			reply.Success = false
+			reply.FollowerTerm = rf.currentTerm
+			reply.ConflictIndex = rf.snapshotLastIncludeIndex + 1
+			reply.ConflictTerm = rf.snapshotLastIncludeTerm
+			return
+		}
 		//这里是follower的日志多了一部分
 		if rf.getEntryTerm(args.PrevLogIndex) != args.PrevLogTerm {
 			reply.Success = false
@@ -88,7 +96,7 @@ func (rf *Raft) HandleAppendEntriesRPC(args *AppendEntriesArgs, reply *AppendEnt
 		if index > rf.Log.LastLogIndex {
 			rf.Log.appendL(entry)
 			DPrintf("Node %d appended new entry at index %d: %v", rf.me, index, entry.Command)
-		} else if rf.Log.getOneEntry(index).Term != entry.Term {
+		} else if index >= rf.snapshotLastIncludeIndex && rf.Log.getOneEntry(index).Term != entry.Term {
 			ok = false
 			DPrintf("Node %d found term mismatch at index %d: 本来Log的term : %d, entry :  %d", rf.me, index, rf.Log.getOneEntry(index).Term, rf.Log.getOneEntry(index).Command)
 			//rf.Log.Entries[index-1] = entry // 覆盖

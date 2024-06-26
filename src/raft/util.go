@@ -93,6 +93,7 @@ func (applyHelper *ApplyHelper) tryApply(msg *ApplyMsg) bool {
 		applyHelper.q = append(applyHelper.q, *msg)
 		applyHelper.lastItemIndex = msg.SnapshotIndex
 		applyHelper.cond.Broadcast()
+		DPrintf("applyhelper added snapshot msg to queue and broadcasted with index=%v", msg.SnapshotIndex)
 		return true
 	} else {
 		panic("applyHelper meet both invalid")
