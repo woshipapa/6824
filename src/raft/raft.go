@@ -184,12 +184,14 @@ func (rf *Raft) readPersist(data []byte) {
 			DPrintf("votedFor: %v\n", rf.votedFor)
 			//DPrintf("commitIndex: %v\n", rf.commitIndex)
 			//DPrintf("lastApplied: %v\n", rf.lastApplied)
-
+			DPrintf("lastIncludedTerm: %v\n", rf.snapshotLastIncludeTerm)
+			DPrintf("lastIncludedIndex: %v\n", rf.snapshotLastIncludeIndex)
 			//// 输出 Log 的详细内容
 			//DPrintf("Log: FirstLogIndex: %v, LastLogIndex: %v, Entries:\n", rf.Log.FirstLogIndex, rf.Log.LastLogIndex)
 			//for i, entry := range rf.Log.Entries {
 			//	DPrintf("Entry %d: Term: %v, Command: %v\n", i, entry.Term, entry.Command)
 			//}
+			DPrintf("Log: FirstLogIndex: %v, LastLogIndex: %v, Entries: %v\n", rf.Log.FirstLogIndex, rf.Log.LastLogIndex, rf.Log.Entries)
 			rf.snapshot = rf.persister.ReadSnapshot()
 			rf.commitIndex = rf.snapshotLastIncludeIndex
 			rf.lastApplied = rf.snapshotLastIncludeIndex
